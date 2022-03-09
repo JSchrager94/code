@@ -1,0 +1,233 @@
+%let path = "Path name Left out for privacy";
+libname raw "&Path\data\Raw";
+libname derived "&Path\data\Derived";
+libname output "&Path\documents\output";
+footnote "SAS Program Stored in: &path\programs\Draft\Import OBGYN.sas";
+
+/* IMPORT DATA */
+PROC IMPORT OUT= RAW.OBGYN
+            DATAFILE= ""Path name Left out for privacy"\EpiduralDB_edit1_DeID_jesse.xlsx"
+            DBMS=EXCEL REPLACE;
+     RANGE="'0$'";
+     GETNAMES=YES;
+     MIXED=NO;
+     SCANTEXT=YES;
+     USEDATE=YES;
+     SCANTIME=YES;
+RUN;
+
+
+proc print data=raw.OBGYN(obs=50);
+var Ketorolac_FIRST_DOSE_AFTER_IN_RO;
+run;
+ods rtf file = ""Path name Left out for privacy"\Contents of data OBGYN &sysdate..doc" ;
+proc contents data=raw.OBGYN;
+run;
+ods rtf close;
+
+ods rtf file = ""Path name Left out for privacy"\Summary Statistics OBGYN &sysdate..doc" ;
+proc means data=raw.OBGYN maxdec=2 n nmiss max min mean median std;
+run;
+ods rtf close;
+
+
+proc contents data=raw.OBGYN;
+run;
+
+proc print data=raw.OBGYN(obs=50);
+var Base_Class RACE ETHNIC_GROUP CASE_PROCEDURES;
+run;
+
+/* Creating numeric variables for analysis*/
+data derived.OBGYN;
+set raw.OBGYN;
+
+/* creating new variable for time and dose from Ketorolac_FIRST_DOSE_AFTER_IN_RO */
+
+drug= substr(Ketorolac_FIRST_DOSE_AFTER_IN_RO, 1, 5);
+dose= substr(Ketorolac_FIRST_DOSE_AFTER_IN_RO, 49, 3);
+date_time= substr(Ketorolac_FIRST_DOSE_AFTER_IN_RO, 58, 19);
+
+if dose eq "PAH" then do ;
+dose =30 ; date_time = "Apr 5 2016 12:52PM";
+
+end;
+
+new_date_time=input(date_time, anydtdtm.);
+
+CP_01 = substr(CASE_PROCEDURES,1,5);
+CP_02 = substr(CASE_PROCEDURES,8,13);
+
+
+   
+/*Create new binary variables from the categorical ones*/
+array old(*) MEDIAN_PAIN_SCALE_POD_1 IQR1 LOWER_QUARTILE_POD_1 UPPER_QUARTILE_POD_1 MEDIAN_PAIN_SCALE_POD_2 IQR2
+                 LOWER_QUARTILE_POD_2 UPPER_QUARTILE_POD_2 MEDIAN_PAIN_SCALE_POD_3 IQR3 LOWER_QUARTILE_POD_3 UPPER_QUARTILE_POD_3 dose
+
+                 TOTAL_PO_POD0 TOTAL_PO_POD1 TOTAL_PO_POD2 TOTAL_PO_POD3 TOTAL_PO_POD4 TOTAL_PO_POD5;
+
+array new (*)n_MEDIAN_PAIN_SCALE_POD_1 n_IQR1 n_LOWER_QUARTILE_POD_1 n_UPPER_QUARTILE_POD_1 n_MEDIAN_PAIN_SCALE_POD_2 n_IQR2
+                 n_LOWER_QUARTILE_POD_2 n_UPPER_QUARTILE_POD_2 n_MEDIAN_PAIN_SCALE_POD_3 n_IQR3 n_LOWER_QUARTILE_POD_3 n_UPPER_QUARTILE_POD_3 N_dose
+
+                 n_TOTAL_PO_POD0 n_TOTAL_PO_POD1 n_TOTAL_PO_POD2 n_TOTAL_PO_POD3 n_TOTAL_PO_POD4 n_TOTAL_PO_POD5;
+
+do i = 1 to dim(new);
+new(i) = 1*old(i);
+end;
+
+
+if n_TOTAL_PO_POD0 ne . then POD_0_500= (n_TOTAL_PO_POD0 ge 500);
+if n_TOTAL_PO_POD1 ne . then POD_1_500= (n_TOTAL_PO_POD1 ge 500);
+if n_TOTAL_PO_POD2 ne . then POD_2_500= (n_TOTAL_PO_POD2 ge 500);
+if n_TOTAL_PO_POD3 ne . then POD_3_500= (n_TOTAL_PO_POD3 ge 500);
+if n_TOTAL_PO_POD4 ne . then POD_4_500= (n_TOTAL_PO_POD4 ge 500);
+if n_TOTAL_PO_POD5 ne . then POD_5_500= (n_TOTAL_PO_POD5 ge 500);
+
+
+
+
+format new_date_time datetime18.;
+run;
+proc contents data=derived.OBGYN;
+run;
+
+/* QC on new case procdure variable*/
+proc print data=derived.OBGYN (obs=500);
+var CASE_PROCEDURES CP_01 CP_02;
+run;
+
+proc freq data= raw.OBGYN;   **************** something needs to be cleaned for variable
+table CASE_PROCEDURES;
+run;
+
+
+
+
+/* QA on new date variable */
+proc print data=derived.OBGYN (obs=50);
+var date_time new_date_time;
+run;
+
+
+/*   QA  on POD_0_500,POD_1_500,POD_2_500,POD_3_500,POD_4_500,POD_5_500*/
+%macro POD_QC (p,p_new);
+
+proc means data= derived.OBGYN;
+class &p;
+var &p_new;
+run;
+
+proc freq data=derived.OBGYN;
+tables &p*&p_new /list missing;
+run;
+
+%mend;
+
+
+%POD_QC (POD_0_500,n_TOTAL_PO_POD0);
+%POD_QC (POD_1_500,n_TOTAL_PO_POD1);
+%POD_QC (POD_2_500,n_TOTAL_PO_POD2);
+%POD_QC (POD_3_500,n_TOTAL_PO_POD3);
+%POD_QC (POD_4_500,n_TOTAL_PO_POD4);
+%POD_QC (POD_5_500,n_TOTAL_PO_POD5);
+
+
+ods rtf file = ""Path name Left out for privacy"\Binary count for POD over 500 &sysdate..doc" ;
+proc freq data=derived.OBGYN;
+table POD_0_500 POD_1_500 POD_2_500 POD_3_500 POD_4_500 POD_5_500;
+run;
+ods rtf close;
+
+
+/* QA  on date time variable*/
+proc print data=derived.OBGYN (obs=50);
+var Ketorolac_FIRST_DOSE_AFTER_IN_RO drug dose date_time;
+run;
+proc freq data=derived.OBGYN;
+table date_time dose drug;
+run;
+/* QC on obs 2050 */
+proc print data=derived.OBGYN;
+var Ketorolac_FIRST_DOSE_AFTER_IN_RO drug dose date_time MRN;
+where MRN eq 7512171;
+run;
+
+
+
+ods rtf file = ""Path name Left out for privacy"\Summary Statistics pain scores &sysdate..doc" ;
+Proc means data=derived.OBGYN maxdec=2 n nmiss mean std min max median qrange;
+var n_MEDIAN_PAIN_SCALE_POD_1 n_IQR1 n_LOWER_QUARTILE_POD_1 n_UPPER_QUARTILE_POD_1 n_MEDIAN_PAIN_SCALE_POD_2 n_IQR2
+    n_LOWER_QUARTILE_POD_2 n_UPPER_QUARTILE_POD_2 n_MEDIAN_PAIN_SCALE_POD_3 n_IQR3 n_LOWER_QUARTILE_POD_3 n_UPPER_QUARTILE_POD_3;
+title "Descriptive Statistics on Pain Scores";
+run;
+title close;
+ods rtf close;
+
+ods rtf file = ""Path name Left out for privacy"   Statistics pain scores by Epidural yes_no  &sysdate..doc" ;
+
+Proc means data=derived.OBGYN maxdec=2 n nmiss mean std min max median qrange;
+var n_MEDIAN_PAIN_SCALE_POD_1 n_IQR1 n_LOWER_QUARTILE_POD_1 n_UPPER_QUARTILE_POD_1 n_MEDIAN_PAIN_SCALE_POD_2 n_IQR2
+    n_LOWER_QUARTILE_POD_2 n_UPPER_QUARTILE_POD_2 n_MEDIAN_PAIN_SCALE_POD_3 n_IQR3 n_LOWER_QUARTILE_POD_3 n_UPPER_QUARTILE_POD_3;
+class EPIDURAL;
+title "Descriptive Statistics on Pain Scores";
+run;
+
+Proc npar1way data=derived.OBGYN anova;
+var n_MEDIAN_PAIN_SCALE_POD_1  n_MEDIAN_PAIN_SCALE_POD_2  n_MEDIAN_PAIN_SCALE_POD_3;
+class EPIDURAL;
+title "Descriptive Statistics on Pain Scores";
+run;
+ods rtf close;
+
+
+
+/* QA on missing values for pain score*/
+proc print data=derived.OBGYN;
+var MEDIAN_PAIN_SCALE_POD_1;
+where n_MEDIAN_PAIN_SCALE_POD_1 = . and MEDIAN_PAIN_SCALE_POD_1  ne "";
+run;
+
+
+/* Base_Class, RACE, ETHNIC_GROUP, CASE_PROCEDURES  */     /* age*/
+/* CASE_PROCEDURES has 0 missing values (we need to clean variable) */     ****************************************************************
+proc contents data=raw.OBGYN;
+run;
+proc print data=raw.OBGYN(obs=50);
+var Base_Class RACE ETHNIC_GROUP CASE_PROCEDURES;
+run;
+
+
+ods rtf file = ""Path name Left out for privacy"\Summary Statistics Base_Class, RACE, ETHNIC_GROUP, CASE_PROCEDURES &sysdate..doc" ;
+proc freq data= raw.OBGYN;
+tables Base_Class RACE ETHNIC_GROUP CASE_PROCEDURES;
+run;
+ods rtf close;
+
+
+
+/* Length of Stay (LOS)TOTAL_PO_POD0 TOTAL_PO_POD1 TOTAL_PO_POD2 TOTAL_PO_POD3 TOTAL_PO_POD4 TOTAL_PO_POD5 */
+ods rtf file = "Q:\Mary Sammel\OBGYN\Latif Nawar\Fellow_2021\documents\output\Summary Statistics Length of stay &sysdate..doc" ;
+  Proc means data=derived.OBGYN maxdec=2 n nmiss mean std min max median qrange;
+var LOS n_TOTAL_PO_POD0 n_TOTAL_PO_POD1 n_TOTAL_PO_POD2 n_TOTAL_PO_POD3 n_TOTAL_PO_POD4 n_TOTAL_PO_POD5;
+title "Decriptive Statistics on LOS TOTAL_PO_POD0 TOTAL_PO_POD1 TOTAL_PO_POD2 TOTAL_PO_POD3 TOTAL_PO_POD4 TOTAL_PO_POD5";
+ run;
+title close;
+ods rtf close;
+
+
+/* Length of stay QC */
+ods rtf file = ""Path name Left out for privacy"\QC on Length of stay &sysdate..doc" ;
+proc univariate data= derived.OBGYN;
+var LOS;
+id LOG_ID MRN;
+run;
+ods rtf close;
+
+
+/* Date and time and dose are important: (delimited by -)
+   Create two more variables one for dose and on for date and time
+Ketorolac_FIRST_DOSE_AFTER_IN_RO*/
+
+proc print data=derived.OBGYN (obs=50);
+var Ketorolac_FIRST_DOSE_AFTER_IN_RO;
+run;
