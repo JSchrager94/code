@@ -206,7 +206,7 @@ ods rtf close;
 
 
 /* Length of Stay (LOS)TOTAL_PO_POD0 TOTAL_PO_POD1 TOTAL_PO_POD2 TOTAL_PO_POD3 TOTAL_PO_POD4 TOTAL_PO_POD5 */
-ods rtf file = "Q:\Mary Sammel\OBGYN\Latif Nawar\Fellow_2021\documents\output\Summary Statistics Length of stay &sysdate..doc" ;
+ods rtf file = "QPath name Left out for privacy\Summary Statistics Length of stay &sysdate..doc" ;
   Proc means data=derived.OBGYN maxdec=2 n nmiss mean std min max median qrange;
 var LOS n_TOTAL_PO_POD0 n_TOTAL_PO_POD1 n_TOTAL_PO_POD2 n_TOTAL_PO_POD3 n_TOTAL_PO_POD4 n_TOTAL_PO_POD5;
 title "Decriptive Statistics on LOS TOTAL_PO_POD0 TOTAL_PO_POD1 TOTAL_PO_POD2 TOTAL_PO_POD3 TOTAL_PO_POD4 TOTAL_PO_POD5";
