@@ -1,0 +1,206 @@
+---
+title: "Homework 2 Markdown"
+author: "Jonah Schrager"
+date: "7/17/2021"
+output: word_document
+---
+```{r}
+setwd("~/Desktop/Data Mining/Homework 2")
+data2 <- read.csv("HW2data.csv")
+  str(data2) #looks at structure of data (Lecture 1)
+library(tidyverse)
+library(caret)
+```
+
+#Question 2A
+```{r}
+model.lm <- lm.fit <- lm(Solubility ~ ., data = data2)
+```
+
+#question 2B
+# Majority of the coedfficients are between -2 and 2 and Normally distributed.
+```{r}
+hist(summary(model.lm)$coefficient)
+```
+
+
+#Question 2C
+# The optimal number of predictors is 117
+```{r}
+library(caret)
+library(leaps)
+library(lattice)
+fitControl <- trainControl(method = "cv", number = 10) # Use 10-fold CV
+nvmaxGrid <- expand.grid(nvmax = seq(1, 150, by = 1)) # Set grid of tuning parameters
+
+set.seed(1) # Make results reproducible because the next function calls the random number generator
+
+model.step <- train(Solubility ~ .,
+                    data = data2,
+                    method = "leapBackward",
+                    trControl = fitControl,
+                    tuneGrid = nvmaxGrid) 
+
+model.step # Find test RMSE and optimal number of predictors using RSS
+
+```
+
+#Question 2D
+# You can say it starts to level off at RMSE aorund 1.
+```{r}
+library(tidyverse) # necessary for the ggplot() function
+
+ggplot(model.step$results, aes(x = nvmax, y = RMSE)) +
+  geom_line( )
+
+lm.fit <- lm(Solubility ~ .,
+             data = data2)
+```
+
+#Question 2E
+# It says 59 predicitors, and is less then what we got with RSS. which was 117
+```{r}
+which.min(summary(model.step)$bic)
+```
+
+#Question 2F
+# Our optimal Lambda was Lambda = 0.1232847,
+```{r}
+tune.grid <- expand.grid(alpha = 0, 
+                         lambda = 10^seq(-4, .5, length = 100)) # alpha = 0 for ridge regression. lambda is the "shrinkage" tuning parameter. The bigger the value, the more the coefficients get shrunk to 0
+
+set.seed(1) # Make reproducible results
+model.ridge <- train(Solubility ~ .,
+                     data = data2,
+                     method = "glmnet",
+                     trControl = fitControl,
+                     tuneGrid = tune.grid) # still doing 10-fold CV to find optimal lambda. Just need to change the method
+model.ridge
+```
+
+#Question 2G
+# The histogram looks closely the same, there were zero.
+```{r}
+coef.ridge <- coef(model.ridge$finalModel, model.ridge$bestTune$lambda)
+
+hist(coef.ridge[,1])
+
+length(which(coef.ridge[,1] == 0))
+```
+
+#Question 2H
+```{r}
+set.seed(1) 
+model.lasso <- train(Solubility ~ .,
+                     data = data2,
+                     method = "glmnet",
+                     trControl = fitControl,
+                     tuneGrid = tune.grid)
+```
+
+#Question 2I
+# The forst split was NumCarbon with value of 11.5
+# Our test RMSE was 0.8310872 
+```{r}
+fitControl <- trainControl(method = "cv", number = 10) # Do 10-fold CV
+set.seed(1) 
+
+cpGrid <- expand.grid(cp = 0) # No pruning
+
+model.tree <- train(Solubility ~ .,
+                    data = data2,
+                    method = "rpart", 
+                    trControl = fitControl,
+                    tuneGrid = cpGrid)
+
+model.tree
+
+par(xpd = NA) # prevents text from getting clipped off
+plot(model.tree$finalModel) # plot the tree
+text(model.tree$finalModel) # add text and values
+```
+
+#Question 2J
+# Wwe ended with 9 terminal nodes, we did better and have a simpler tree, the unpruned tree is unreadable at the bottom.
+```{r}
+set.seed(1)
+model.tree <- train(Solubility ~ .,
+                    data = data2,
+                    method = "rpart",
+                    trControl = fitControl,
+                    tuneLength = 10)
+
+model.tree
+```
+
+
+#Question 2K
+```{r}
+
+```
+
+#Question 2L
+# We did better than a single tree
+```{r}
+fitControl <- trainControl(method = "cv", number = 10) # Do 10-fold CV
+library(caret)
+set.seed(1)
+model.tree <- train(Solubility ~ .,
+                    data = data2,
+                    method = "rpart",
+                    trControl = fitControl,
+                    tuneLength = 15)
+
+model.tree
+```
+
+#Question 2M
+# MolWeight was number one and NumNonHAtoms second, NumCarbon third. These are all closing correlated to solubility.
+```{r}
+varImp(model.tree)
+```
+
+#Question 2N
+```{r}
+library(caret)
+
+mtryGrid <- expand.grid(mtry = seq(4,5,by = 1)) # Because sqrt(19) = 4.36
+
+set.seed(1)
+model.rf <- train(Solubility ~ .,
+                  data = data2,
+                  method = "rf",
+                  trControl = trainControl(method = "oob"), # Use OOB instead of CV
+                  tuneGrid = mtryGrid)
+
+model.rf
+plot(varImp(model.rf))
+```
+
+#Question 2O
+# I would choose the pruned regression tree because it is simpler and can be more efficient specially when you have a large data set.
+
+#Question 3
+# It would match up with Partition A, because after the first two splits all the predcitors would be below 5.5 so as long as 6.00,11.5,and 13.24 are below the 5.5 mark then that decsion tree would be the match.
+
+#Question 4
+# The Tree that matches would be the same as question 3 it would be the tree with 6.083,9.269, and 14.120 on the left because of the split those values must be all partinioned below the 5.5 mark at x2.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

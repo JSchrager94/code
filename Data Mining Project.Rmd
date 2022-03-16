@@ -1,0 +1,191 @@
+---
+title: "Data Mining Project"
+author: "Jonah Schrager"
+date: "7/6/2021"
+output: word_document
+---
+#description of data   
+# BTC https://finance.yahoo.com/quote/BTC-USD/history/
+# XRP https://finance.yahoo.com/quote/XRP-USD?p=XRP-USD&.tsrc=fin-srch
+# ETH https://finance.yahoo.com/quote/ETH-USD?p=ETH-USD&.tsrc=fin-srch
+# USD https://finance.yahoo.com/quote/DX-Y.NYB?p=DX-Y.NYB&.tsrc=fin-srch
+# S&P https://stooq.com/q/d/?s=%5Espx&c=0&d1=20150807&d2=20210802
+
+###This dataset provides the history of daily prices of Bitcoin, Ethereum, and XRP. The data starts from August 7th 2015 and is updated till August 2nd 2021. All the column descriptions are provided.
+
+# Merged all four data sets into one (each have the crypto/usd prefix before variable)
+```{r}
+ library(tidyverse)  
+ library(dplyr)
+library(caret)
+
+setwd("~/Desktop/Data Mining/PRoject")
+crypto <- read.csv("Jonah.csv")
+btc <- read.csv("BTC-USD.csv")
+eth <- read.csv("ETH-USD.csv")
+xrp <- read.csv("XRP-USD.csv")
+usd1 <- read.csv("DX-Y.NYB.csv")
+usd <- na.omit(usd1)
+s_p1 <- read.csv("HistoricalData_sp.csv")
+s_p <- na.omit(s_p1)
+
+sp_clean <- read.csv("SP_clean.csv")
+btc_clean <- read.csv("BTC_clean.csv")
+xrp_clean <- read.csv("XRP_clean.csv")
+eth_clean <- read.csv("ETH_clean.csv")
+
+ 
+coins1 <- merge(btc, eth, by = "Date", all = TRUE)
+coins2 <- merge(coins1,xrp, by = "Date", all = TRUE)
+coins3 <- merge(coins2,usd, by = "Date", all = TRUE)
+coins4 <- merge(coins3,s_p, by = "Date", all = TRUE)
+coins <- merge(coins4, usd, by = "Date", all = TRUE)
+coins <- na.omit(coins4)  #We are omitting all missing values for Weekends/holidays when the market is closed
+
+```
+
+#Descriptive statistics 
+```{r}
+str(btc)
+str(coins)
+```
+
+
+#Correlations
+```{r}
+library("ggpubr")
+ ex1 <- cor.test(coins$ETH_High, coins$BTC_High, 
+                    method = "pearson")
+ ex1
+ 
+ ex2 <- cor.test(coins$SP_High, coins$BTC_High, 
+                    method = "pearson")
+ ex2
+ 
+ ex3 <- cor.test(coins$XRP_High, coins$BTC_High, 
+                    method = "pearson")
+ ex3
+```
+
+
+#Graphs
+```{r}
+library(ggplot2)
+library(dplyr)
+library(plotly)
+library(hrbrthemes)
+
+
+
+ggplot(btc, aes(x = BTC_Volume, y = BTC_Close)) + 
+  geom_point( )
+geom_smooth(method = lm)
+
+
+btc_clean %>% 
+  ggplot(aes(x = Date, y = BTC_High)) +
+    geom_line(color = "orange") + ylab("bitcoin price ($)") + xlab("Date range 8.7.2015 - 8.2.2021")
+    ylim(0,22000) 
+
+sp_clean %>% 
+  ggplot(aes(x = Date, y = High)) +
+    geom_line(color = "orange") + ylab("S&P 500 price ($)") + xlab("Date range 8.7.2015 - 8.2.2021")
+    ylim(1700,5000) 
+
+xrp_clean %>% 
+  ggplot(aes(x = Date, y = XRP_High)) +
+    geom_line(color = "orange") + ylab("XRP price ($)") + xlab("Date range 8.7.2015 - 8.2.2021")
+    ylim(.08,.8) 
+
+eth_clean %>% 
+  ggplot(aes(x = Date, y = ETH_High)) +
+    geom_line(color = "orange") + ylab("ETH price ($)") + xlab("Date range 8.7.2015 - 8.2.2021")
+    ylim(0,3000) 
+```
+
+#Unsupervised learning # Trying to find some type of subgroup # Wanted to do unsupervised learning in the exploratory data analysis stage 
+```{r}
+crypto_non <- crypto[,sapply(crypto, is.numeric)]
+head(crypto_non)
+
+
+
+library(GGally)
+pairs(crypto_non, lower.panel = NULL)
+ggpairs(sp_clean)
+
+pca <- prcomp(crypto_non)
+
+pca.sc <- prcomp(crypto_non, scale = TRUE)
+
+summary(pca.sc)
+
+biplot(pca.sc)
+
+
+```
+
+
+# Multiple linear regression using XRP_Close and ETH_Close to predcit BTC_Close
+```{r}
+#XRP to ETH RSquared (.32)
+lm.fit <- lm(BTC_High ~ XRP_Close, data = coins)      
+  summary(lm.fit)
+# ETH to BTC RSquared (.82)
+lm.fit <- lm(BTC_High ~ ETH_Close, data = coins)
+   summary(lm.fit)
+   
+lm.fit <- lm(BTC_High ~ SP_Close, data = coins)
+   summary(lm.fit)   
+
+    #Using SP close,XRP and ETH closing price to predict BTC closing RSquared (.88)
+lm.fit.mult <- lm(BTC_High ~ XRP_Close + ETH_Close + SP_Close, data = coins)
+       summary(lm.fit.mult)
+```
+
+# KNN model before centering a scaling
+```{r}
+library(caret)  
+
+fitControl <- trainControl(method = "cv", number = 10) 
+set.seed(1)    #reproducible results when there are random draws
+model.knn <- train(BTC_Close ~ SP_Close + ETH_Close + XRP_Close,   #Break up the data sets into training and test sets in order to get a more realistic idea how                                                         well we can predict future values of Bitcoin price.
+                   data = coins,
+                   method = "knn",
+                   trControl = fitControl) 
+  model.knn 
+```
+
+# Added Center and Scale, in the end model we added SP_Close, ETH_Close, XRP_Close to get the best r sqaured and the lowest RMSE
+```{r}
+set.seed(1)
+model.knn.sc <- train(BTC_Close ~ SP_Close, 
+                  data = coins, 
+                  method = "knn",
+                  preProc = c("center", "scale"),
+                  trControl = fitControl) 
+
+  model.knn.sc
+  
+set.seed(1)
+model.knn.sc <- train(BTC_Close ~ SP_Close + ETH_Close, 
+                  data = coins, 
+                  method = "knn",
+                  preProc = c("center", "scale"),
+                  trControl = fitControl) 
+
+  model.knn.sc
+  
+set.seed(1)
+model.knn.sc <- train(BTC_Close ~ SP_Close + ETH_Close + XRP_Close, 
+                  data = coins, 
+                  method = "knn",
+                  preProc = c("center", "scale"),
+                  trControl = fitControl) 
+
+  model.knn.sc
+```
+
+
+
+

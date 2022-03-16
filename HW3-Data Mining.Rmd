@@ -1,0 +1,232 @@
+---
+title: "HW3"
+author: "Jonah Schrager"
+date: "7/28/2021"
+output: word_document
+---
+#2A
+```{r}
+setwd("~/Desktop/Data Mining")
+
+library(caret)
+library(tidyverse)
+
+heart <- read.csv("HW3data.csv")
+str(heart)
+table(heart$target)
+```
+
+#2B
+```{r}
+library(ggplot2)
+library(GGally)
+
+ggpairs(heart, aes(color = target, alpha = 0.4))
+```
+
+#2C- 66% is the best accuracy
+```{r}
+fitControl <- trainControl(method = "cv", number = 5,
+                           classProbs = TRUE)
+kGrid <- expand.grid(k = seq(1, 19, by = 2))
+set.seed(1)
+model.knn <- train(target ~ ., 
+                   data = heart,
+                   method = "knn",
+                   trControl = fitControl,
+                   tuneGrid = kGrid)
+
+model.knn
+```
+
+#2D
+```{r}
+predict(model.knn, heart[1, ])
+
+d <- as.matrix(dist(heart[ ,
+-14]))
+```
+
+#2E- 7 (yes) 4 (No)
+```{r}
+d[1, ]
+
+order(d[1,])[2:12]
+
+heart$target[order(d[1,])[2:12]]
+```
+#2F- Our new test accuracy is .818, this is more accurate because of centering and scaling to mean 0 and variance 1 it finds ,inear combinations ased on how much variance they explain.
+```{r}
+fitControl <- trainControl(method = "cv", number = 5,
+                           classProbs = TRUE)
+kGrid <- expand.grid(k = seq(1, 19, by = 2))
+set.seed(1)
+model.knn <- train(target ~ ., 
+                   data = heart,
+                   method = "knn",
+                   trControl = fitControl,
+                   preProcess = c("center", "scale"),
+                   tuneGrid = kGrid)
+
+model.knn
+```
+
+#2G Our new accuracy is .825
+```{r}
+fitControl <- trainControl(method = "cv", number = 5,
+                           classProbs = TRUE) 
+
+set.seed(1)
+model.glm <- train(target ~ .,
+                   data = heart,
+                   method = "glm",
+                   family = "binomial",
+                   trControl = fitControl)  
+
+model.glm  
+  summary(model.glm) 
+```
+
+#2H- yes was considered a success because it was 80  percent of the observations. The probability of a success devided by the probability of a failure is odds. if we are considering 80/20 a success then we have four to one odds. 
+```{r}
+pred.prob <- predict(model.glm, heart, type = "prob") 
+    head(pred.prob, 1) 
+```
+
+#2I- Sensitivity was 85% and specificity was 15%
+```{r}
+
+pred.class.new <- ifelse(pred.prob$Yes >= 0.50, "Yes", "No") 
+table(heart$target, pred.class.new)
+mean(heart$target == pred.class.new)
+```
+
+#2J
+```{r}
+pred.class.new <- ifelse(pred.prob$Yes >= 0.3, "Yes", "No") 
+table(heart$target, pred.class.new)
+mean(heart$target == pred.class.new)
+```
+
+#2k
+```{r}
+fitControl <- trainControl(method = "cv", number = 5,
+                           classProbs = TRUE,
+                           summaryFunction = twoClassSummary) 
+set.seed(1)
+model.glm <- train(target ~ .,
+                   data = heart,
+                   method = "glm",
+                   family = "binomial",
+                   metric = "ROC",
+                   trControl = fitControl) 
+model.glm
+
+```
+
+#2L
+```{r}
+
+fitControl <- trainControl(method = "cv", number = 5,
+                           classProbs = TRUE,) 
+set.seed(1)
+model.tree <- train(target ~ .,
+                    data = heart,
+                    method = "rpart",
+                    trControl = fitControl,
+                    tuneLength = 10)
+
+model.tree
+plot(model.tree$finalModel)
+text(model.tree$finalModel)
+
+heart %>% 
+  filter( ca >= .05,
+          thalach < 142.5) %>% 
+  group_by(target) %>% 
+  summarize(n = n())
+```
+
+#2M- Looks like cp was the most inportant variable, slope was the least important.We are now using the gini index to measure how important each varaible is we measure the purity of the nodes. 
+```{r}
+mtryGrid <- expand.grid(mtry = seq(3,4,by = 1))
+
+set.seed(1)
+model.rf <- train(target ~ .,
+                  data = heart,
+                  method = "rf",
+                  trControl = trainControl(method = "oob"),
+                  tuneGrid = mtryGrid)
+
+varImp(model.rf)
+varImp(model.rf, scale = FALSE) 
+
+pred.class.rf <- predict(model.rf, heart)
+  head(pred.class.rf)
+
+table(heart$target, pred.class.rf)
+
+pred.class.rf <- predict(model.rf, heart)
+  head(pred.class.rf)
+
+table(heart$target, pred.class.rf)
+```
+
+#2N-  Our best accuracy was 96% percent speceficity.we need the trees because we need to combine those trees so we can get a better perfromanece than a single tree. we want to boost so we can give them better weight when we end up combining them. There is no random sampling using bootstrap, we are using the same sample and placing different weights on observations that we misclassified. 
+```{r}
+set.seed(1)
+model.gbm <- train(target ~ ., 
+                   data = heart,
+                   method = "gbm",
+                   trControl = fitControl)
+
+model.gbm
+
+pred.gbm <- predict(model.gbm, heart)
+  table(heart$target, pred.gbm)
+
+tune.gbm.grid <- expand.grid(interaction.depth = seq(1, 4, by = 1),
+                             n.trees = c(25, 50, 75, 100),
+                             shrinkage = c(.01, .1, .3),
+                             n.minobsinnode = c(5, 10))
+
+set.seed(1)
+model.gbm <- train(target ~ ., 
+                   data = heart,
+                   method = "gbm",
+                   trControl = fitControl,
+                   tuneGrid = tune.gbm.grid)
+
+
+model.gbm
+```
+
+
+```{r}
+tune.gbm.grid <- expand.grid(interaction.depth = seq(1, 4, by = 1),
+                             n.trees = c(25, 50, 75, 100),
+                             shrinkage = c(.01, .1, .3),
+                             n.minobsinnode = c(5, 10))
+
+set.seed(1)
+model.gbm <- train(target ~ ., 
+                   data = heart,
+                   method = "gbm",
+                   trControl = fitControl,
+                   tuneGrid = tune.gbm.grid)
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

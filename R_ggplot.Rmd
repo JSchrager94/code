@@ -1,0 +1,167 @@
+---
+title: "Assignment 1.0"
+author: "Jonah Schrager"
+date: "2/11/2022"
+output: html_document
+---
+
+<style type="text/css">
+
+div#TOC li {
+    list-style:none;
+    background-image:none;
+    background-repeat:none;
+    background-position:0;
+}
+h1.title {
+  font-size: 24px;
+  color: DarkRed;
+  text-align: center;
+}
+h4.author { /* Header 4 - and the author and data headers use this too  */
+    font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: DarkRed;
+  text-align: center;
+}
+h4.date { /* Header 4 - and the author and data headers use this too  */
+  font-size: 18px;
+  font-family: "Times New Roman", Times, serif;
+  color: DarkBlue;
+  text-align: center;
+}
+h1 { /* Header 1 - and the author and data headers use this too  */
+    font-size: 22px;
+    font-family: "Times New Roman", Times, serif;
+    color: darkred;
+    text-align: center;
+}
+h2 { /* Header 2 - and the author and data headers use this too  */
+    font-size: 18px;
+    font-family: "Times New Roman", Times, serif;
+    color: navy;
+    text-align: left;
+}
+
+h3 { /* Header 3 - and the author and data headers use this too  */
+    font-size: 15px;
+    font-family: "Times New Roman", Times, serif;
+    color: navy;
+    text-align: left;
+}
+
+h4 { /* Header 4 - and the author and data headers use this too  */
+    font-size: 18px;
+    font-family: "Times New Roman", Times, serif;
+    color: darkred;
+    text-align: left;
+}
+</style>
+
+```{r setup, include=FALSE}
+if (!require("tidyverse")) {
+   install.packages("tidyverse")
+   library(tidyverse)
+}
+if (!require("knitr")) {
+   install.packages("knitr")
+   library(knitr)
+}
+if (!require("cowplot")) {
+   install.packages("cowplot")
+   library(cowplot)
+}
+if (!require("latex2exp")) {
+   install.packages("latex2exp")
+   library(latex2exp)
+}
+if (!require("plotly")) {
+   install.packages("plotly")
+   library(plotly)
+}
+if (!require("gapminder")) {
+   install.packages("gapminder")
+   library(gapminder)
+}
+if (!require("png")) {
+    install.packages("png")             # Install png package
+    library("png")
+}
+if (!require("RCurl")) {
+    install.packages("RCurl")             # Install RCurl package
+    library("RCurl")
+}
+if (!require("colourpicker")) {
+    install.packages("colourpicker")              
+    library("colourpicker")
+}
+if (!require("gganimate")) {
+    install.packages("gganimate")              
+    library("gganimate")
+}
+if (!require("gifski")) {
+    install.packages("gifski")              
+    library("gifski")
+}
+if (!require("magick")) {
+    install.packages("magick")              
+    library("magick")
+}
+if (!require("grDevices")) {
+    install.packages("grDevices")              
+    library("grDevices")
+}
+if (!require("jpeg")) {
+    install.packages("jpeg")              
+    library("jpeg")
+}
+if (!require("ggplot2")) {
+   install.packages("ggplot2")
+   library(ggplot2)
+}
+if (!require("patchwork")) {
+   install.packages("patchwork")
+   library(patchwork)
+}
+# knitr::opts_knit$set(root.dir = "C:/Users/75CPENG/OneDrive - West Chester University of PA/Documents")
+# knitr::opts_knit$set(root.dir = "C:\\STA490\\w05")
+##
+knitr::opts_chunk$set(echo = TRUE,       
+                      warning = FALSE,   
+                      result = TRUE,   
+                      message = FALSE)
+```
+
+
+# Plot using GGPLOT
+```{r}
+library(RCurl)
+x <- getURL("https://raw.githubusercontent.com/JSchrager94/STA-553/main/Data/penguins.csv?token=GHSAT0AAAAAABQ7IHI3L2FWUPSS334LFIQOYP3B62A")
+p <- read.csv(text = x)
+
+
+bill_flipper_plot <- ggplot(data= p) + geom_point(mapping = aes (bill_length_mm, flipper_length_mm, color= species, shape=species, size=body_mass_g))
+
+
+penguin_plot <- bill_flipper_plot + labs(x = "Bill Length", y = "Flipper Length", title = "Bill Length vs Flipper Length")
+penguin_plot<- penguin_plot + theme_dark() + labs(title = "Bill Length vs Flipper Length", subtitle = "Plot points proportional to body mass",caption = "Jonah Schrager STA 553")
+
+
+
+
+myurl <- "https://i.dailymail.co.uk/i/pix/2015/03/06/2660A3DA00000578-0-The_local_rockhopper_penguins_are_hugely_popular_with_visitors-m-79_1425649402734.jpg"
+z <- tempfile()
+download.file(myurl,z,mode = "wb")
+pic <- readJPEG(z)
+raster.penguin <- as.raster(pic)
+
+
+
+pic2 <- penguin_plot + 
+  inset_element(p = raster.penguin,
+                left = .05,
+                bottom = .65,
+                right = .25,
+                top = .95)
+pic2
+```

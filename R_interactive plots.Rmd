@@ -1,0 +1,284 @@
+title: ""
+author: "Jonah Schrager"
+date: "2/28/2022"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+if (!require("tidyverse")) {
+   install.packages("tidyverse")
+   library(tidyverse)
+}
+if (!require("knitr")) {
+   install.packages("knitr")
+   library(knitr)
+}
+if (!require("cowplot")) {
+   install.packages("cowplot")
+   library(cowplot)
+}
+if (!require("latex2exp")) {
+   install.packages("latex2exp")
+   library(latex2exp)
+}
+if (!require("plotly")) {
+   install.packages("plotly")
+   library(plotly)
+}
+if (!require("gapminder")) {
+   install.packages("gapminder")
+   library(gapminder)
+}
+if (!require("png")) {
+    install.packages("png")             # Install png package
+    library("png")
+}
+if (!require("RCurl")) {
+    install.packages("RCurl")             # Install RCurl package
+    library("RCurl")
+}
+if (!require("colourpicker")) {
+    install.packages("colourpicker")              
+    library("colourpicker")
+}
+if (!require("gganimate")) {
+    install.packages("gganimate")              
+    library("gganimate")
+}
+if (!require("gifski")) {
+    install.packages("gifski")              
+    library("gifski")
+}
+if (!require("magick")) {
+    install.packages("magick")              
+    library("magick")
+}
+if (!require("grDevices")) {
+    install.packages("grDevices")              
+    library("grDevices")
+}
+if (!require("jpeg")) {
+    install.packages("jpeg")              
+    library("jpeg")
+}
+if (!require("ggplot2")) {
+   install.packages("ggplot2")
+   library(ggplot2)
+}
+if (!require("patchwork")) {
+   install.packages("patchwork")
+   library(patchwork)
+}
+if (!require("survey")) {
+   install.packages("survey)")
+   library(survey)
+}
+knitr::opts_chunk$set(echo = TRUE,       
+                      warning = FALSE,   
+                      result = TRUE,   
+                      message = FALSE)
+```
+
+
+#The four subsets contain information that potentially impacts the life expectancy of the world. The data cover relative information between between 1800 and 2018. 
+
+```{r}
+library(RCurl)
+x <- getURL("https://raw.githubusercontent.com/JSchrager94/STA-553/main/Data/income_per_person.csv")
+income.person <- read.csv(text = x)
+
+x <- getURL("https://raw.githubusercontent.com/JSchrager94/STA-553/main/Data/life_expectancy_years.csv")
+life.expectancy <- read.csv(text = x)
+
+x <- getURL("https://raw.githubusercontent.com/JSchrager94/STA-553/main/Data/countries_total.csv")
+country.totals <- read.csv(text = x)
+
+x <- getURL("https://raw.githubusercontent.com/JSchrager94/STA-553/main/Data/population_total.csv")
+pop.size <- read.csv(text = x)
+
+x <- getURL("https://raw.githubusercontent.com/JSchrager94/STA-553/main/Data/POC.csv")
+poc <- read.csv(text = x)
+```
+
+#creating longitudinal data for life expectancy
+```{r}
+life.expectancy.long <- life.expectancy %>%
+  gather(key = "Year",       # the column names of the wide table
+         value = "lifeExp",  # the numerical values of the table
+         -geo,          # drop country variable: its value will not be gathered (stacked)!
+         na.rm = TRUE)       # removing records with missing values
+##
+
+```
+
+```{r}
+correct.life.exp.data <- life.expectancy.long %>%
+                      mutate(year = substr(Year,2,5)) %>%
+                      select(-Year)
+
+```
+
+#creating longitudinal data for income
+```{r}
+income.person.long <- income.person %>%
+  gather(key = "Year",      
+         value = "income", 
+         -geo,         
+         na.rm = TRUE)      
+
+
+```
+
+```{r}
+correct.income.person.data <- income.person.long %>%
+                      mutate(year = substr(Year,2,5)) %>%
+                      select(-Year)
+
+```
+
+#creating longitudinal data for population size
+```{r}
+pop.size.long <- pop.size %>%
+  gather(key = "Year",      
+         value = "pop_size", 
+         -geo,         
+         na.rm = TRUE)      
+
+
+```
+
+#getting rid of x in the year variable
+```{r}
+correct.pop.size.long <- pop.size.long %>%
+                      mutate(year = substr(Year,2,5)) %>%
+                      select(-Year)
+
+```
+
+
+#Sorting data by year
+```{r}
+#correct.income.person.data[order(correct.income.person.data$year),]
+
+#correct.life.exp.data[order(correct.life.exp.data$year),]
+```
+
+
+# Merge data stes together
+```{r}
+LifeExpIncom = merge(x = correct.income.person.data, y = correct.life.exp.data)
+
+
+LifeExpIncom.1 = merge(x = LifeExpIncom, y = country.totals, by.x = 'geo', by.y ='name', all = FALSE)
+
+LifeExpIncom.2 = merge(x = LifeExpIncom.1, y = correct.pop.size.long)
+life.exp <- round(LifeExpIncom.2$lifeExp)
+
+
+```
+
+#subsetting datat set for year 2015
+```{r}
+year.15 <- subset(LifeExpIncom.2, year == 2015)
+
+```
+
+
+#interactive plot for 2015
+```{r}
+
+pop.size = year.15$`pop size`
+
+
+plot_ly(
+    data = year.15,
+    x = ~lifeExp,  # Horizontal axis 
+    y = ~income,  
+    p = ~pop.size, # Vertical axis 
+     color = ~factor(geo), # must be a numeric factor
+     text = ~geo,     # show the species in the hover text
+     ## using the following hovertemplate() to add the information of the
+     ## two numerical variable to the hover text.
+     hovertemplate = paste('<i><b>Population<b></i>: %{p}',
+                           '<br><b>%{text}</b>'),
+     alpha  = 0.5,
+     size = ~pop_size,
+     type = "scatter",
+     mode = "markers"
+ ) %>%
+    layout(  
+      ## graphic size
+      with = 700,
+      height = 700)
+```
+
+
+```{r}
+year <- as.numeric(LifeExpIncom.2$year)
+
+```
+
+
+#interactive plot for all the years
+```{r}
+lifeExp_num <- as.data.frame(apply(LifeExpIncom.2, 2, as.numeric))  # Convert all variable types to numeric
+sapply(lifeExp_num, class)
+lifeExp_num$geo <- as.character(lifeExp_num$geo) 
+sapply(lifeExp_num, class)
+
+
+w <- ggplot(lifeExp_num, aes(income, lifeExp, 
+                  size = pop_size, colour = geo)) +
+           geom_point(alpha = 0.5, show.legend = FALSE) +
+           scale_colour_manual(values = country_colors) +
+           #scale_color_manual(values=c("dodgerblue4", "darkolivegreen4","darkorchid3")) +
+           #scale_color_brewer(palette="Set1") +
+           scale_size(range = c(2,50)) +
+           scale_x_log10() +
+           # break down the previous single plot by continent 
+           # facet_wrap(~continent) +     # create multiple panels according to the continents
+           # Here comes the gganimate specific bits
+           labs(title = 'Year: {frame_time}', 
+                    x = 'Life Expectancy',
+                    y = 'Income') +
+           transition_time(year) +
+           ease_aes('linear')
+###
+animate(w, renderer = gifski_renderer(),
+          rewind = TRUE)
+
+```
+
+
+
+#Random sample of 500 gas stations 
+```{r}
+samp <- poc %>% ungroup() %>% sample_n(500)
+```
+
+
+#gas stations
+```{r}
+## preparing data
+#poc <- read_csv("https://raw.githubusercontent.com/JSchrager94/STA-553/main/Data/POC.csv")
+poc.site <- samp[samp$POC == 1,]
+# geo styling
+geostyle <- list(scope = 'usa',
+                 projection = list(type = 'albers usa'),
+                 showland = TRUE,
+                 landcolor = toRGB("gray95"),
+                 subunitcolor = toRGB("gray85"),
+                 countrycolor = toRGB("gray85"),
+                 countrywidth = 0.5,
+                 subunitwidth = 0.5
+               )
+## plotting map
+fig <- plot_geo(samp, lat = ~ycoord, lon = ~xcoord) %>%
+       add_markers(text = ~SITE_DESCRIPTION, 
+                   color = "red", 
+                   symbol = I("circle"), 
+                   size = I(8), 
+                   hoverinfo = "text" )   %>%
+        layout( title = 'Gas stations', geo = geostyle)
+fig
+```

@@ -1,0 +1,153 @@
+---
+title: "Homework 1"
+author: "Jonah Schrager"
+date: "7/8/2021"
+output: word_document
+---
+
+#Question 2
+```{r}
+setwd("~/Desktop/Data Mining/Lecture 1")
+data <- read.csv("HW1data.csv")
+  str(data) #looks at structure of data (Lecture 1)
+  library(tidyverse)  
+```
+#Question 2A- ggplot- Best fitting line with OLS
+```{r}
+ggplot(data, aes(x = Ht, y = LBM)) + 
+  geom_point() +
+geom_smooth(method = "lm", se = FALSE) #adding best fitting line
+```
+#question 2B # For every .66 increase in LBM, there is an increase in 1 cm in Ht
+
+```{r}
+# Multiple Linear Regression for LBM and Ht
+fit <- lm(Ht ~ LBM, data = data)
+summary(fit)  #show results for LBM and Ht
+```
+#Question 2C # # For every 2.5 decrease in RCC, there is an increase in 1 cm in Ht
+```{r}
+# Multiple Linear Regression for LBM and Ht and RCC
+fit <- lm(Ht ~ LBM + RCC, data = data)
+summary(fit) # show results for LBM and Ht and RCC
+```
+#Question 2D # for every 1 cm decrease in Ht, there is a increase in male obs by .87
+```{r}
+# Multiple Linear Regression for LBM and Ht and RCC and Sex
+fit <- lm(Ht ~ LBM + RCC + Sex, data = data)
+summary(fit) # show results for LBM and Ht and RCC and Sex
+```
+#Question 2E #There looks like there is a correlation that the males are taller.
+```{r}
+ggplot(data, aes(x = Ht, y = LBM, color = Sex) ) +
+     geom_point() +
+     geom_smooth(method = "lm", se = FALSE)
+```
+#Question 2F
+```{r}
+obs1 <- head(predict(fit), Sex = f, LBM = 180, RCC = 4.5, n = 1)
+```
+#Qustion 2G
+```{r}
+obs2 <- head(predict(fit), Sex = f, LBM = 181, RCC = 4.5, n = 1)
+
+obs2 - obs1
+
+```
+#Question 2H i j
+```{r}
+library(caret)
+fitControl <- trainControl(method = "cv", number = 10)
+set.seed(1)
+summarize(group_by(data, Sex), 
+          mean = mean(LBM))
+       
+set.seed(1)
+model.knn.sc <- train(LBM ~ ., 
+                  data = data, 
+                  method = "knn",
+                  preProc = c("center", "scale"),
+                  trControl = fitControl) 
+
+
+model.knn.sc
+
+kGrid <- expand.grid(k = seq(1, 19, by = 2))
+set.seed(1)
+model.knn.sc.k <- train(LBM ~ ., 
+                      data = data, 
+                      method = "knn",
+                      preProc = c("center", "scale"),
+                      trControl = fitControl,
+                      tuneGrid = kGrid)
+
+```
+
+
+#Question 3A
+```{r}
+set.seed(1)
+x1 <- runif(10, 0, 1)
+x2 <- runif(10, 0, 1)
+y <- 2*x1 + 3*x2 + rnorm(10, 0, 1)
+```
+#Question 3B
+```{r}
+sqrt((x1 - .5)^2 + (x2 - .5)^2)
+```
+#Question 3C
+```{r}
+x <- mean(y[c(3, 9)])
+```
+#Question 3D
+```{r}
+lm.fit <- lm(y ~ x1 + x2)
+predict(lm.fit, newdata = data.frame(x1 = .5, x2 = .5))
+```
+#Question 3E
+```{r}
+#Seed 2
+set.seed(2) 
+x1 <- runif(10, 0, 1)
+x2 <- runif(10, 0, 1)
+y <- 2*x1 + 3*x2 + rnorm(10, 0, 1)
+
+sqrt((x1 - .5)^2 + (x2 - .5)^2)
+
+t <- mean(y[c(1, 3)])
+
+lm.fit <- lm(y ~ x1 + x2)
+predict(lm.fit, newdata = data.frame(x1 = .5, x2 = .5))
+
+#Seed 3
+set.seed(3) 
+x1 <- runif(10, 0, 1)
+x2 <- runif(10, 0, 1)
+y <- 2*x1 + 3*x2 + rnorm(10, 0, 1)
+
+sqrt((x1 - .5)^2 + (x2 - .5)^2)
+
+z <- mean(y[c(3, 9)])
+
+lm.fit <- lm(y ~ x1 + x2)
+predict(lm.fit, newdata = data.frame(x1 = .5, x2 = .5))
+
+var(c(x,y,z))
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
