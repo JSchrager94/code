@@ -1,0 +1,138 @@
+---
+title: "Lecture 2 R Code"
+author: "Drew Crossett"
+date: "7/7/2021"
+output: word_document
+---
+
+## Slides 5-7
+
+Change the working directory (this will be different for you!) to wherever you downloaded the data set. Read in the data set and call it ```credit```. This data set has 400 observations and 11 variables. The response variable is the credit card ```Balance```. Also, load the ```tidyverse``` package.
+
+Make a scatterplot with ```Limit``` on the x-axis and ```Balance``` on the y-axis. Add the OLS best-fitting line with confidence bands. We can see that there is a significant positive linear relationship between the two variables. In other words, as one's credit limit increases, their balance also tends to increase. In fact, we expect the balance to increase by about .1716 dollars for every additional dollar in credit limit, on average.
+
+```{r}
+library(tidyverse)
+
+setwd("~/Desktop/WCU Courses/Summer21/STA 536/Week 1")
+
+credit <- read.csv("Lecture2data.csv")
+  str(credit)
+  
+ggplot(credit, aes(x = Limit, y = Balance)) +
+  geom_point() +
+  geom_smooth(method = lm)
+
+lm.fit <- lm(Balance ~ Limit, data = credit)
+  summary(lm.fit)
+```
+
+## Slides 8-12
+
+In order to perform multiple linear regression, we simply "add" in the other predictor variables. If we want to include everything but the response variable as a predictor, then we can use the shorthand period notation. 
+
+R will automatically convert categorical predictors into dummy variables. It will read in the categories alphabetically so the first level will be set as the baseline (i.e. equals 0). R will append the non-baseline level (Yes in this example) at the end of the categorical variable name to let you know that's what gets the 1. We can also add complexity to scatterplots by fitting separate OLS best-fitting lines for every level of a categorical variable. 
+
+The ```predict()``` function let's us make predictions for future values using our fitted model. Your ```newdata``` argument must be a data frame or else you will get an error!
+
+```{r}
+lm.fit.mult <- lm(Balance ~ Limit + Income, data = credit)
+  summary(lm.fit.mult)
+  
+lm.fit.cat <- lm(Balance ~ Limit + Income + Student, 
+                 data = credit)
+  summary(lm.fit.cat)
+  
+ggplot(credit, aes(x =Limit, y =Balance,color = Student)) +
+  geom_point( ) +
+  geom_smooth(method = lm)
+  
+predict(lm.fit.cat, 
+        newdata = data.frame(Limit = 5000, Income = 45, 
+                             Student = "Yes"))
+
+predict(lm.fit.cat, 
+        newdata = data.frame(Limit = 5000, Income = 46, 
+                             Student = "Yes"))
+  
+lm.fit.full <- lm(Balance ~ ., data = credit)
+  summary(lm.fit.full)
+
+```
+
+## Slides 13-15
+
+We need to break up the data sets into training and test sets in order to get a more realistic idea how well we can predict future values. Since this is so dependent on which observations are put in which set, we average over multiple *folds* by using k-fold CV. We will use the ```caret```package for finding test errors using CV for lots of different models going forward. R will use the bootstrap by default so we need to tell it to use 10-fold CV.
+
+```{r}
+library(caret)    
+  
+model <- train(Balance ~ ., 
+               data = credit, 
+               method = "lm")
+
+  summary(model) # same as full model from previous part
+  model # gets test RMSE (along with optimal tuning parameters if applicable)
+  
+fitControl <- trainControl(method = "cv", number = 10)
+
+model.cv <- train(Balance ~ ., 
+                  data = credit, 
+                  method = "lm",
+                  trControl = fitControl)
+  model.cv
+  
+sqrt((1/400)*sum((credit$Balance -   lm.fit.full$fitted.values)^2))
+```
+
+## Slides 21-22
+
+Here, we will perform KNN using the ```caret``` package. The only necessary change from linear regression is to change the ```method```. We also see how to make reproducible results when there are random draws by using the ```set.seed()``` function. We can pass these objects into the ```predict()``` function very easily.
+
+KNN should have centered and scaled explanatory variables because it uses Euclidean distances. We don't want one variable dominating the rest simply because of its units of measurement. This is especially true when the chosen units are relatively arbitrary. We can do this inside the ```train()``` function using the ```preProc``` argument. This is short for "pre-processing".
+
+KNN does have a tuning parameter (k, the number of neighbors to use). R will provide a default grid. But you can also specify the parameter grid manually using the ```tuneGrid``` argument.
+
+```{r}
+set.seed(1) # set the seed for the random number generator. The argument can be any positive integer.
+model.knn <- train(Balance ~ .,
+                   data = credit,
+                   method = "knn",
+                   trControl = fitControl) # fitControl already defined earlier
+  model.knn 
+  
+#
+  
+test.new <- data.frame(Income = 100, Limit = 5000,
+                       Rating = 700, Cards = 3, 
+                       Age = 42, Education = 13, 
+                       Gender = "Female", Student = "No",
+                       Married = "Yes", Ethnicity = "Caucasian")
+
+predict(model.knn, newdata = test.new)
+
+#
+
+set.seed(10)
+model.knn.sc <- train(Balance ~ ., 
+                  data = credit, 
+                  method = "knn",
+                  preProc = c("center", "scale"),
+                  trControl = fitControl) 
+
+  model.knn.sc
+
+#  
+
+kGrid <- expand.grid(k = seq(1, 21, by = 2))
+set.seed(10)
+model.knn.sc.k <- train(Balance ~ ., 
+                      data = credit, 
+                      method = "knn",
+                      preProc = c("center", "scale"),
+                      trControl = fitControl,
+                      tuneGrid = kGrid)
+
+  model.knn.sc.k
+```
+  

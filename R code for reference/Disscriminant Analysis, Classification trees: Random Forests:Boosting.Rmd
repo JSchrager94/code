@@ -1,0 +1,176 @@
+---
+title: "Lecture 7 R Code"
+author: "Drew Crossett"
+date: "7/23/2021"
+output: word_document
+---
+
+## Slide 7
+
+One advantage of LDA over logistic regression is that it's much easier to deal with situations where your response variable has more than two classes. In the two-class setting, they tend to perform similarly under most circumstances. This example has 59 observations and 5 variables. Our response variable (```fruit\_name```) has four classes: apple (x 19), lemon (x 16), mandarin (x 5), and orange (x 19). So we have some class imbalance with the mandarins but not nearly as severe as what we saw with the ```Default``` data set.
+
+From the looks of the scatterplot, we shouldn't have too difficult of a time classifying the lemons and mandarins because they're pretty easilly separable. The harder part is going to be separating the apples and oranges. Using 5-fold CV, we get an accuracy of about 0.81 and kappa of about 0.735. In other words, we correctly classify the fruit about 81\% of the time in the held out test sets with LDA and we did much better than what would be expected just due to chance. LDA does not have any tuning parameters.
+
+```{r, message = FALSE}
+setwd("~/Desktop/WCU Courses/Summer21/STA 536/Week 3")
+
+library(caret)
+library(tidyverse)
+
+fruit <- read.csv("Lecture7data.csv")
+  str(fruit)
+  
+table(fruit$fruit_name)
+
+fitControl <- trainControl(method = "cv", number = 5)
+
+set.seed(1)
+model.lda <- train(fruit_name ~ ., 
+                  data=fruit, 
+                  method="lda",
+                  trControl = fitControl)
+
+model.lda
+```
+
+## Slide 8
+
+From the *training* confusion matrix, anything on the off-diagonal are mistakes. We can see that we incorrectly predicted 4 apples as oranges, 1 lemon as an orange, and 5 oranges as apples. This looks about right based on the previous scatterplot.
+
+The prior probabilities of groups are just the proportion of observations that fell in each class from the original data set. For example, apples had $19/59 = 0.322$ observations, lemons had $16/59 = 0.271$, etc.
+
+The group means are just the mean value of each predictor grouped by their class label. We could get the mass mean by typing: ```summarize(group_by(fruit, fruit_name), mean(mass))```
+
+The coefficients of the linear discriminants give us the equation for the hyperplanes that make up the *decision boundary*. For example, the first hyperplane would have the equation $LD1 = -0.009\cdot mass + 2.994\cdot width - 2.102\cdot height + 8.296\cdot color\_score$. We have three discriminant functions because we have four response classes. You will always have one less than the number of classes.
+
+Finally, the proportion of trace is the proportion of explained *between-group* variation. In other words, the first hyperplane was fixed such that it alone explained about 85\% of the variation between the two groups (one on each side of the boundary). The second hyperplane now gives us three regions to choose from (three groups). We explain an additional 13.82\% of the variation between the groups by adding this second decision boundary, etc.
+
+```{r}
+pred.class <- predict(model.lda, fruit)
+  pred.class # predicted classes of original observations using model from previous part.
+pred.prob <- predict(model.lda, fruit, type = "prob")
+  head(pred.prob) # predicted probabilities of original observations using model from previous part
+
+table(fruit$fruit_name, pred.class) # confusion matrix of training data
+
+model.lda$finalModel # final model
+```
+
+## Slides 14 - 15
+
+There are really only two things that change when you have classification trees as opposed to regression trees. First, since our response variable is categorical, we can't take the *average* of the response values for each observation that falls in the terminal node. Instead, we use *majority rules*. Secondly, instead of choosing variables and cuts to make decisions based on decreasing the RSS, we trying to decrease the **Gini Index**. This gives us a measure of node *purity*. We want our terminal nodes to have mostly just one class. Pruning the tree, on the other hand, will still be based on test accuracy since that's the ultimate goal.
+
+There were five terminal nodes. I verify that the predicted class in each node is what the majority of observations that fall in that node have for a response class. The two nodes on the right side of the tree are *pure* because they only got lemons (left node) and oranges (right node).
+
+```{r}
+set.seed(1)
+model.tree <- train(fruit_name ~ .,
+                    data = fruit,
+                    method = "rpart",
+                    trControl = fitControl,
+                    tuneLength = 10)
+
+model.tree
+
+par(xpd = NA)
+plot(model.tree$finalModel)
+text(model.tree$finalModel)
+
+fruit %>% 
+  filter(height < 7.95, 
+         mass >= 128,
+         width >= 7.25) %>% 
+  group_by(fruit_name) %>% 
+  summarize(n = n())
+
+fruit %>% 
+  filter(height < 7.95, 
+         mass >= 128,
+         width < 7.25) %>% 
+  group_by(fruit_name) %>% 
+  summarize(n = n())
+
+fruit %>% 
+  filter(height < 7.95, 
+         mass < 128) %>% 
+  group_by(fruit_name) %>% 
+  summarize(n = n())
+
+fruit %>% 
+  filter(height >= 7.95, 
+         width < 7.4) %>% 
+  group_by(fruit_name) %>% 
+  summarize(n = n())
+
+
+fruit %>% 
+  filter(height >= 7.95, 
+         width >= 7.4) %>% 
+  group_by(fruit_name) %>% 
+  summarize(n = n())
+```
+
+As usual, single decision trees tend to be too flexible to have much predictive ability. So we can use an ensemble approach called *random forests*. Everything is the same as the regression setting except we now order variable's importance by the amount of Gini Index they save at each decision. I only considered one value of the tuning parameter (mtry = 2). But we can see that we get a test accuracy of about 0.95! The most important variable, by far, is ```color\_score```, which shouldn't be too surprising given what we are actually classifying. On top of that, this model perfectly classifies each of our training observations.
+
+```{r}
+mtryGrid <- expand.grid(mtry = c(2))
+
+set.seed(1)
+model.rf <- train(fruit_name ~ .,
+                  data = fruit,
+                  method = "rf",
+                  trControl = trainControl(method = "oob"),
+                  tuneGrid = mtryGrid)
+
+model.rf
+
+varImp(model.rf) # Defaults to decrease in Gini Index
+varImp(model.rf, scale = FALSE) # Defaults to decrease in Gini Index
+
+pred.class.rf <- predict(model.rf, fruit)
+  head(pred.class.rf)
+
+table(fruit$fruit_name, pred.class.rf)
+
+pred.class.rf <- predict(model.rf, fruit)
+  head(pred.class.rf)
+
+table(fruit$fruit_name, pred.class.rf)
+```
+
+## Slide 20
+
+Boosting is another **ensemble** approach (like random forests). One big difference between boosting and bagging is bagging can be run in parallel because the trees are independent of one another. Boosting, on the other hand, *learns* by making the next tree based on mistakes made from the previous tree. Unlike in bagging, having too many trees in the boosting can lead to overfitting. Essentially, observations that are incorrectly classified in one interation are given more relative weight in the next iteration. 
+
+There are a lot of boosting algorithms. We will use the common: gradient boosting. There are four potential tuning parameters in this boosting model. 
+
+```{r, echo = TRUE, results = "hide"}
+set.seed(1)
+model.gbm <- train(fruit_name ~ ., 
+                   data = fruit,
+                   method = "gbm",
+                   trControl = fitControl)
+
+model.gbm
+
+pred.gbm <- predict(model.gbm, fruit)
+  table(fruit$fruit_name, pred.gbm)
+
+## Set up tuning grid
+  
+tune.gbm.grid <- expand.grid(interaction.depth = seq(1, 4, by = 1),
+                             n.trees = c(25, 50, 75, 100),
+                             shrinkage = c(.01, .1, .3),
+                             n.minobsinnode = c(5, 10))
+
+set.seed(1)
+model.gbm <- train(fruit_name ~ ., 
+                   data = fruit,
+                   method = "gbm",
+                   trControl = fitControl,
+                   tuneGrid = tune.gbm.grid)
+```
+
+```{r}
+model.gbm
+```

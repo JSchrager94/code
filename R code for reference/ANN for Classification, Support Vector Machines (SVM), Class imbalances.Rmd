@@ -1,0 +1,95 @@
+---
+title: "Lecture 8 R Code"
+author: "Drew Crossett"
+date: "7/28/2021"
+output: word_document
+---
+
+## Slides 3-4
+
+We have 28 x 28 pixel images of handwritten digits. The intensity of each pixel is on a grayscale between 0 and 256. We start by normalizing each of the 784 (28*28) predictor variables to be between 0 and 1. Our response variable is called ```label```. This labels the digit as a 0, 1, or 2. Then we look at the first observation, which happens to be a 2. I'll explain what each part of the code means in the video.
+
+```{r, message = FALSE}
+setwd("~/Desktop/WCU Courses/Summer21/STA 536/Week 4")
+
+library(caret)
+library(tidyverse)
+library(neuralnet)
+
+image <- read.csv("Lecture8data.csv")
+
+  scale01 <- function(x){
+    if(max(x) == 0){ # so we don't get a 0 in the denominator
+      return(output <-  0)}
+    else{
+    output <- (x - min(x)) / (max(x) - min(x))
+    }
+  }
+  
+image.norm <- mutate_all(image[ , -1], scale01) # scale everything but the first variable (label)
+  image.norm <- data.frame(image$label, image.norm) # combine label column with scaled pixel values
+    names(image.norm)[1] <- "label" # rename first column back to label
+    
+test <- matrix(as.numeric(image.norm[1,-1]), 
+                          nrow = 28, ncol = 28,
+                          byrow = TRUE) # Turn variables into a matrix of pixels. Only looking at the first observation. Remove first column because that's the label
+
+test1 <- apply(test, 2, rev) # the image() function plots the pixels in "reverse" order of how we would think of a matrix
+
+  image(t(test1), useRaster=TRUE, axes=FALSE,
+        col = grey(seq(0, 1, length = 256)))  # plot the image. The t( ) function stands for "transpose". Get grayscale values between 0 and 256 (normalized to be between 0 and 1)  
+```
+
+## Slides 5 - 6
+
+Here, we use ANN to try to predict the image label based on the pixel color intensity information. The only difference between regression and classification is one additional argument. One hidden layer with one hidden node does a poor job because it doesn't predict any training values to be a 2. However, two hidden layers with 5 and 3 nodes, respectively, correctly labels all but one image in our training set. **Note**: Remember that we are using the same observations to train the model and test it. So we are most likely being overly optimistic here.
+
+```{r}
+image.norm$label <- as.character(image$label) # change response variable to character
+  table(image.norm$label) # look at the distribution of response classes
+
+set.seed(1)
+model.nn <- neuralnet(label ~., 
+                      data = image.norm,
+                      linear.output = FALSE, # necessary for classification
+                      hidden = c(5, 3)) 
+ 
+pred.nn <- predict(model.nn, image.norm) # get predicted probabilities of each class
+  pred.class <- ifelse(max.col(pred.nn)==1, "0",
+                    ifelse(max.col(pred.nn)==2,"1",
+                              "2")) # Assign classes based on highest predicted probabilities
+  
+  table(image.norm$label, pred.class) # get confusion matrix
+```
+
+## Slide 12
+
+SVMs are another black-box classification algorithm that has been shown to perform very well on complicated data sets. If ```method = "svmLinear"``` then we are using the *support vector classifier*, which means are NOT adding another dimension to the feature space with a kernel. The tuning parameter is called ```C```. This is a nonnegative number that controls the severity of violations to the margin and hyperplane. Smaller values (closer to 0) seek narrower margins that are rarely violated, so they highly fit the training data (low bias, high variance). As C gets bigger (to the number of observations in the training set), we allow for more *support vectors* (i.e. potential "misses"). This decreases the variance at the cost of a higher bias.
+
+If we use ```method = "svmRadial"``` then we are using a *support vector machine*. This increases the feature space using a *kernel*, which adds an additional tuning parameter, ```sigma```. The bigger this value, the more *local* features in the training set will be enhanced (higher variance).
+
+I don't look at any additional tuning parameters. But we could using the ```expand.grid()``` function and ```tuneGrid = ``` argument.
+
+```{r, warning = FALSE}
+fitControl <- trainControl(method = "cv", number = 5)
+
+set.seed(1)
+model.svm <- train(label ~., 
+                   data = image.norm, 
+                   method = "svmLinear",
+                   trControl = fitControl)
+
+
+model.svm
+
+#
+
+set.seed(1)
+model.svm <- train(label ~., 
+                   data = image.norm, 
+                   method = "svmRadial",
+                   trControl = fitControl)
+
+
+model.svm
+```

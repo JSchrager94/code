@@ -1,0 +1,132 @@
+---
+title: "Lecture 3 R Code"
+author: "Drew Crossett"
+date: "7/9/2021"
+output: word_document
+---
+
+## Slides 11 - 13
+
+We start by changing our working directory, reading the data set (calling it ```hitters```) and then loading the ```caret``` package. There are 263 observations and 20 variables in this data set. The response variable is called ```Salary```. It's in thousands of dollars.
+
+```{r}
+setwd("~/Desktop/WCU Courses/Summer21/STA 536/Week 2")
+
+hitters <- read.csv("Lecture3data.csv")
+  str(hitters)
+
+library(caret)
+```
+
+Remember that there is always a tradeoff between bias and variance when in comes to making predictions on independent observations. The more variables we have in the model, the less bias we have, but the more variance. The less bias is because if we included every imagineable variable (including ones we don't have in the data set), then we should do a pretty good job making prediction. But the more variables we include, the closer $p$ (number of predictors), gets to $n$ (number of observations). This gives us more variation from sample to sample (see slide 4 for an extreme example).
+
+We will use a backward stepwise regression model and 10-fold CV to choose the *optimal* number of predictors. The tuning parameter here is the maximum number of predictors to consider for the model. We have 19 potential predictors, so we want it search over that entire grid in a stepwise manner.
+
+You will most likely be prompted to install the ```leaps``` package. Pick Yes (or 1, depending on your operating system). You will only have to do this one time (it will install the package for you).
+
+```{r}
+fitControl <- trainControl(method = "cv", number = 10) # Use 10-fold CV
+nvmaxGrid <- expand.grid(nvmax = seq(1, 19, by = 1)) # Set grid of tuning parameters
+
+set.seed(1) # Make results reproducible because the next function calls the random number generator
+
+model.step <- train(Salary ~ .,
+                    data = hitters,
+                    method = "leapBackward",
+                    trControl = fitControl,
+                    tuneGrid = nvmaxGrid) 
+
+model.step # Find test RMSE and optimal number of predictors using RSS
+```
+
+Using 10-fold CV, we see that the optimal number of predictors is $p = 10$ and we are off on the test sets by an average of about \$330.28 (thousand). Then we can look at which variables are chosen for the model. Alternative to using the RSS, we can use BIC scores, which almost always give you model with fewer variables. The optimal number of predictors using BIC scores is 8 because that's the smallest value (most negative).
+
+We can see from the plot of number of predictors (x-axis) vs. the test RMSE that our test predictions get better (lower test error) as the number of variables increase until we get to $p = 10$. Then it starts to increase. This most likely means that after we already have those ten in the model, we are adding more variance than the bias we are removing. **NOTE**: stepwise regression is a *greedy* algorithm. It does NOT mean this is the BEST model of all possible predictor combinations.
+
+Once we have selected the correct number of predictors, we re-fit the linear model using all of the observations to get our coefficient estimates. Then we can use this fitted model to make predictions on independent observations.
+
+```{r}
+summary(model.step)$rss # last one is smallest. This is why R stopped at p = 10
+summary(model.step)$bic # Gives a more parsimonious model.
+
+library(tidyverse) # necessary for the ggplot() function
+
+ggplot(model.step$results, aes(x = nvmax, y = RMSE)) +
+  geom_line( )
+
+lm.fit <- lm(Salary ~ AtBat + Hits + Walks + 
+               CRuns + CRBI + CWalks + Division + PutOuts,
+             data = hitters) # chose p = 8 because of BIC
+
+summary(lm.fit) # Look at coefficient estimates from entire data set using only the 8 selected predictors
+
+predict(lm.fit, newdata = data.frame(AtBat = 450,
+                                         Hits = 165,
+                                         Walks = 75,
+                                         CRuns = 600,
+                                         CRBI = 700,
+                                         CWalks = 350,
+                                         Division = "E",
+                                         PutOuts = 650)) # New observation with these characteristics
+```
+
+## Slides 21 - 22
+
+Unlike stepwise regression, which penalizes more variables AFTER fitting the model, regularization simultaneously fits the model and penalizes more parameters. It does this by *shrinking* many of the coefficients to 0. Not only does this have nicer theoretical properties, it also allows us to fit linear models when the number of parameters is greater than the number of observations (and often does much better as the number of parameters gets closer to the number of observations). Basically, we are purposefully adding bias to the model in order to reduce the variance. The LASSO can actually force coefficients to be zero.
+
+Once again, R will most likely prompt you to install the ```glmnet``` package. You will only have to do this one time.
+
+```{r}
+tune.grid <- expand.grid(alpha = 0, 
+                         lambda = 10^seq(-2, 2, length = 100)) # alpha = 0 for ridge regression. lambda is the "shrinkage" tuning parameter. The bigger the value, the more the coefficients get shrunk to 0
+
+set.seed(123) # Make reproducible results
+model.ridge <- train(Salary ~ .,
+                     data = hitters,
+                     method = "glmnet",
+                     trControl = fitControl,
+                     tuneGrid = tune.grid) # still doing 10-fold CV to find optimal lambda. Just need to change the method
+
+model.ridge
+```
+
+Using the grid of potential lambda values and 10-fold CV, we get an *optimal* value of lambda = 22.5702. Looking at the table, this gives us a test RMSE of about 334.59.
+
+Next, we want to look at the estimated coefficients from ridge regression using that optimal value of lambda. We also include the coefficient estimates using OLS. We can see that most of the ridge regression coefficients are closer to 0 than the OLS coefficients. 
+
+```{r}
+coef(model.ridge$finalModel, model.ridge$bestTune$lambda) # Get coefficient estimates from ridge regression using optimal lambda
+
+set.seed(123) # actually not necessary here, but just added for completeness
+model.lm <- train(Salary ~ .,
+                  data = hitters,
+                  method = "lm",
+                  trControl = fitControl) # fit linear model using OLS
+
+summary(model.lm) # Look at coefficient estimates from OLS model
+```
+
+We can make predictions of independent observations using the ridge regression model (and optimal lambda chosen via 10-fold CV) using the predict function. Here, I just pretending like the first observations is *new* so that I didn't have to type out each of the 19 predictors.
+
+Fitting a LASSO model is similar to fitting the ridge model, but now we set ```alpha = 1```. The LASSO does variable selection (like stepwise regression) by forcing some of the coefficient estimates to 0. Any variables in the summary that get a $\cdot$ means they have been set to 0.
+
+```{r}
+predict(model.ridge, newdata = hitters[1,]) # predict a "new" value (it's just the first observation)
+  hitters$Salary[1] # What was the actual salary of the first observation
+
+tune.grid <- expand.grid(alpha = 1, 
+                        lambda = 10^seq(-2, 2, length = 100)) # just changing alpha from 0 to 1 to fit LASSO
+
+set.seed(123)
+model.lasso <- train(Salary ~ .,
+                       data = hitters,
+                       method = "glmnet",
+                       trControl = fitControl,
+                       tuneGrid = tune.grid) 
+
+model.lasso # Gives a similar test RMSE but a different lambda
+
+coef(model.lasso$finalModel, model.lasso$bestTune$lambda)
+```
+
+We can see that the coefficients for ```HmRun```, ```Runs```, ```RBI```, ```CAtBat```, ```CHits```, and ```NewLeague``` all get set to 0. Effectively, that means they are *removed* from the final model when we include all of the observations to make future predictions.

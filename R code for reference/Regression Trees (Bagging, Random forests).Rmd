@@ -1,0 +1,140 @@
+---
+title: "Lecture 4 R Code"
+author: "Drew Crossett"
+date: "7/14/2021"
+output: word_document
+---
+
+## Introductory Stuff
+
+Here, we change our working directory, read in the data set (called ```hitters```) and load the ```tidyverse``` and ```caret``` packages. The data set contains 263 MLB batters (from the early 1990's) and 20 variables. The response variable is called ```Salary```. 
+
+In the following code chunk, I introduce an argument that can help make your final reports a little nicer. The ```message = FALSE``` in the .Rmd file means the final document will not include any messages from R (like what you see when loading the two packages). It still runs and displays the code.
+
+```{r, message = FALSE}
+setwd("~/Desktop/WCU Courses/Summer21/STA 536/Week 2")
+
+hitters <- read.csv("Lecture3data.csv")
+
+library(tidyverse)
+library(caret)
+```
+
+## Slides 6-8
+
+The value displayed in each terminal node of a regression tree is our predicted value of a response that would fall in that node (i.e. follow the path of the tree down to the bottom). It is the mean response value of all observations in our training set which fall in that terminal node. Whichever condition is "TRUE" means "go to the left" in the tree.
+
+We can use the ```filter()``` and ```summarize()``` functions from the ```tidyverse``` package to get the mean values. 
+
+```{r}
+hitters %>% 
+  filter(Years < 4.5) %>% 
+  summarize(mean.salary = mean(Salary)) # mean Salary of all players who played less than 4.5 years
+
+hitters %>% 
+  filter(Years >= 4.5, Hits < 117.5) %>% 
+  summarize(mean.salary = mean(Salary)) # mean Salary of all players who have played more than 4.5 years AND had fewer than 117.5 hits the previous year
+
+hitters %>% 
+  filter(Years >= 4.5, Hits >= 117.5) %>% 
+  summarize(mean.salary = mean(Salary)) # mean Salary of all players who played more than 4.5 years AND had more than 117.5 hits the previous year
+
+yhat <- ifelse(hitters$Years < 4.5, 225.8315, 
+               ifelse(hitters$Hits < 117.5, 464.9167,949.1708)) # Get predicted values of observations based on the tree
+mse <- mean((yhat - hitters$Salary)^2) # average squared difference between predicted Salary and actual Salary
+mse
+
+yhat <- ifelse(hitters$Hits < 117.5, 225.8315, 
+               ifelse(hitters$Years < 4.5, 464.9167,949.1708))
+mse <- mean((yhat - hitters$Salary)^2) 
+mse # Get a higher MSE because used a different first split (Hits instead of Years)
+```
+
+## Slides 11-12
+
+We will use 10-fold CV to get our estimate of the test RMSE. To start, let's examine the unpruned tree. The tree will eventually stop once the RSS in the *training set* increases. This typically leads to over-fitting. So we often prune the tree to fewer terminal nodes to decrease the variance of the model. The test RMSE for the unpruned tree is about 321.21. Our first split is on ```CHits``` but good luck deciphering what's going on towards the bottom of the tree.
+
+```{r}
+fitControl <- trainControl(method = "cv", number = 10) # Do 10-fold CV
+set.seed(123) # Set the seed to get reproducible results
+
+cpGrid <- expand.grid(cp = 0) # No pruning
+
+model.tree <- train(Salary ~ .,
+                    data = hitters,
+                    method = "rpart", 
+                    trControl = fitControl,
+                    tuneGrid = cpGrid)
+
+model.tree
+
+par(xpd = NA) # prevents text from gettting clipped off
+plot(model.tree$finalModel) # plot the tree
+text(model.tree$finalModel) # add text and values
+```
+
+
+We also use CV to choose an optimal number of terminal nodes for pruning the tree. This is done by choosing the cost-complexity parameter (bigger value means simpler trees) that results in the smallest test RMSE. We let R decide which tuning values to use, we just tell it to pick 10 *reasonable* values. The optimal value is cp = 0.0156, which gives us a test RMSE of 315.00. We can also see that the tree is MUCH simpler with only 6 terminal nodes. So we got a simpler "model" AND did better with predictions. It won't always work out this nicely, but that's ok!
+
+```{r}
+set.seed(123)
+model.tree <- train(Salary ~ .,
+                    data = hitters,
+                    method = "rpart",
+                    trControl = fitControl,
+                    tuneLength = 10)
+
+model.tree
+
+
+par(xpd = NA)
+plot(model.tree$finalModel)
+text(model.tree$finalModel)
+```
+
+## Slides 20-21
+
+Single regression trees are nice because of their graphical representation. It doesn't take much to explain to a non-statistician how to use the tree to make predictions. However, they have been shown to have poor predictive power because they are so flexible (i.e. high variance). Small changes in the training set can lead to very large changes in the predictions.
+
+To fix this problem, we make a whole bunch of trees and then average over all those trees. This idea is called **Bagging**. We make all the trees using the **Bootstrap**. This method randomly samples the observations *with replacement*. In order to reduce the variance even more, we can de-correlate the trees by randomly sampling a subset of the predictors at each potential split. This extra wrinkle is called a **Random Forest** model. These have been shown to be extremely powerful tools in all sorts of applications, but are considered a *black-box* method.
+
+The only necessary tuning parameter is the number of predictors to consider at each potential split. A common approach is to use the square root of the number of original predictors. But we can look over a grid of potential values as well. 
+
+```{r}
+mtryGrid <- expand.grid(mtry = seq(4,5,by = 1)) # Because sqrt(19) = 4.36 
+
+set.seed(123)
+model.rf <- train(Salary ~ .,
+                    data = hitters,
+                    method = "rf",
+                    trControl = fitControl,
+                    tuneGrid = mtryGrid)
+
+model.rf
+```
+
+The random forest model with 4 randomly chosen predictors at each split gives us a test RMSE of 275.94. This is much better than a single tree (about a 14\% decrease) and linear regression (about a 19\% decrease). One disadvantage of random forests is that we no longer have that nice tree to look at (because have a whole bunch of trees!). However, it turns out we can still get an idea as to which of the predictors are "more important." At every potential split a predictor (and cut value) are chosen **in order to decrease the training RSS**. And the one that's chosen is the one that decreased the RSS the most. So we can aggregate over all the splits and all the trees to see which predictors *saved* us the most RSS.
+
+```{r}
+varImp(model.rf) # Scaled to be out of 100
+plot(varImp(model.rf))
+
+varImp(model.rf, scale = FALSE) # Unscaled values
+(4933785 - 101457)/(5591506 - 101457) # For CRuns
+```
+
+We get ```CRBI``` to be the most important variable in terms of the relationship with ```Salary```. ```CHits``` is second and ```CRuns``` is third. In fact, the top six variables are all *career* values. So it seems like salaries in baseball (at least at that time) had more to do with a player's career numbers, as opposed to what they did the previous year. I also included the unscaled values (how much RSS was actually saved over all the splits and trees) to show you where the percentages come from. 
+
+Since we are using the bootstrap, each tree in the forest is often constructed *without* certain observations. This is because the bootstrap samples with replacement. On average, about 67\% of the observations will be kept to construct the tree (many kept multiple times). That leaves an average of about 33\% to be held out. We can use these as our test set, as opposed to using CV. This is called the **out-of-bag (OOB)** approach. The beauty of this is that we are fitting and testing at the same time (unlike CV)! This can save a lot of time and energy for larger data sets. And the OOB test RMSE is typically very similar to the CV test RMSE.
+
+```{r}
+set.seed(123)
+model.rf <- train(Salary ~ .,
+                  data = hitters,
+                  method = "rf",
+                  trControl = trainControl(method = "oob"), # Use OOB instead of CV
+                  tuneGrid = mtryGrid)
+
+model.rf
+plot(varImp(model.rf))
+```

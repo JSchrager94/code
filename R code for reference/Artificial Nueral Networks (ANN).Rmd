@@ -1,0 +1,201 @@
+---
+title: "Lecture 5 R Code"
+author: "Drew Crossett"
+date: "7/19/2021"
+output: word_document
+---
+
+## Slide 10
+
+```{r, message = FALSE}
+library(caret)
+library(tidyverse)
+
+setwd("~/Desktop/WCU Courses/Summer21/STA 536/Week 3")
+
+data <- read.csv("Lecture5data.csv")
+  str(data)
+
+set.seed(500)
+train.samp <- createDataPartition(1:nrow(data), p = 0.80) # Create partition with about 80% of the observations in the training and the remaining in test set
+
+data.train <- data[train.samp[[1]], ] # training set
+data.test <- data[-train.samp[[1]], ] # test set
+```
+
+## Slide 11
+
+OLS regression gives us a test RMSE of about 4.032. Both ANN models give us a test RMSE of about 7.677. This is because we need to scale the variables when fitting ANN models.
+
+```{r, message = FALSE}
+lm.fit.train <- lm(medv ~ ., data = data.train) # fit OLS on training set
+  yhat.lm.test <- predict(lm.fit.train, data.test) # predict test response values from above fitted model
+    sqrt(mean((data.test$medv - yhat.lm.test)^2)) # get test RMSE
+    
+library(neuralnet) 
+
+set.seed(123)
+model.nn.try <- neuralnet(medv ~., data = data.train,                                     hidden = c(1)) # ANN with 1 hidden node
+
+plot(model.nn.try) 
+
+yhat.nn.try <- predict(model.nn.try, data.test) # predict test resposne values from above model
+  sqrt(mean((yhat.nn.try - data.test$medv)^2)) # get test RMSE
+  
+  
+set.seed(123)
+model.nn.try <- neuralnet(medv ~., data = data.train,                                     hidden = c(5,3)) # ANN with 2 hidden layers: 5 nodes in the first and 3 in the second
+
+plot(model.nn.try) 
+
+yhat.nn.try <- predict(model.nn.try, data.test) # predict test resposne values from above model
+  sqrt(mean((yhat.nn.try - data.test$medv)^2))
+```
+
+
+## Slide 12
+
+Here, we write a function to scale each of the variables to be between [0, 1]. Then apply this function to every variable in the data set. Re-fit the previous ANN models to get a test RMSE of 3.478 (ANN with one hidden node) and 2.989 (ANN with two hidden layers - 5 nodes in the first and 3 in the second).
+
+**NOTE:** You have to "un-scale" the predicted response values if you want to compare the RMSE to what we got with OLS regression.
+
+```{r}
+scale01 <- function(x){
+    (x - min(x)) / (max(x) - min(x))
+} 
+
+data.norm <- mutate_all(data, scale01) # apply above function to each variable in data
+
+data.train.norm <- data.norm[train.samp[[1]], ] # scaled training set
+data.test.norm <- data.norm[-train.samp[[1]], ] # scaled test set
+
+set.seed(123)
+model.nn <- neuralnet(medv ~., data = data.train.norm, 
+                      hidden = c(1)) # ANN with one hidden node
+ 
+plot(model.nn)  
+
+yhat.nn.norm <- predict(model.nn, data.test.norm)  
+  yhat.nn <- yhat.nn.norm*(max(data$medv) - min(data$medv)) + min(data$medv) # Must "un-scale" predicted response values
+    
+    sqrt(mean((yhat.nn - data.test$medv)^2))
+    
+set.seed(123)
+model.nn <- neuralnet(medv ~., data = data.train.norm, 
+                      hidden = c(5,3)) # ANN with two hidden layers (5 nodes in first and 3 in second)
+ 
+plot(model.nn)  
+
+yhat.nn.norm <- predict(model.nn, data.test.norm)  
+  yhat.nn <- yhat.nn.norm*(max(data$medv) - min(data$medv)) + min(data$medv) # Must "un-scale" predicted response values
+    
+    sqrt(mean((yhat.nn - data.test$medv)^2))    
+```
+
+## Slide 13
+
+We start be fitting a random forest model with $m = 4$ predictors to try at each split. This is because $\sqrt{13} \approx 3.61$. It is often the case that random forest models do just as well (test RMSE of 2.58 which is even better!) than ANN models and don't require as much pre-processing and fine tuning.
+
+Then, we load the ```hitters``` data set from the last two lectures for comparisons sake and to show how to deal with categorical predictors. This ONE fold gives a test RMSE of 462.64 using OLS regression.
+
+```{r}
+library(randomForest)
+
+set.seed(123)
+model.rf <- randomForest(medv ~ ., data = data.train, mtry = 4)
+
+yhat.rf.test <- predict(model.rf, data.test)
+  sqrt(mean((yhat.rf.test - data.test$medv)^2))
+  
+######
+  
+hitters <- read.csv("Lecture3data.csv")
+
+set.seed(500)
+train.samp <- createDataPartition(1:nrow(hitters), p = 0.80)
+
+hitters.train <- hitters[train.samp[[1]], ]
+hitters.test <- hitters[-train.samp[[1]], ]
+
+lm.fit.train <- lm(Salary ~ ., data = hitters.train)
+  yhat.lm.test <- predict(lm.fit.train, hitters.test)
+    sqrt(mean((hitters.test$Salary - yhat.lm.test)^2))  
+```
+
+## Slide 14
+
+This slide shows we can manually change categorical predictors into dummy variables. Remember that we even need to scale dummy variables when fitting an ANN! We get a test RMSE of 456.60 with ANN and one hidden node, 464.62 with two hidden layers (five nodes in first and three in second), and 421.49 with two hidden layers (eight nodes in first and two in second).
+
+```{r}
+feat.dummy <- model.matrix( ~ League + Division + NewLeague,
+                            data = hitters)  # create dummy variables for any categorical predictors
+
+hitters.dummy <- data.frame(select(hitters, -League, -Division,  -NewLeague), feat.dummy[,-1]) # combine quantitative predictors with dummy variables, minus the "intercept" from feat.dummy
+
+names(hitters.dummy)[18:20] <- c("League", "Division", "NewLeague") # Rename dummy variables in new data set to original names (remove the appended "level" to each)
+
+hitters.norm <- mutate_all(hitters.dummy, scale01) # scale new data set with dummy vars.
+    
+  hitters.train.norm <- hitters.norm[train.samp[[1]], ]
+  hitters.test.norm <- hitters.norm[-train.samp[[1]], ]
+
+set.seed(123)
+model.nn <- neuralnet(Salary ~., data = hitters.train.norm,                         hidden = c(1)) # Fit ANN with one hidden node on scaled training set with dummy vars.
+ 
+yhat.nn.norm <- predict(model.nn, hitters.test.norm) 
+
+yhat.nn <- yhat.nn.norm*(max(hitters$Salary) -      min(hitters$Salary)) + min(hitters$Salary) # Unscale predicted response values
+  
+  sqrt(mean((yhat.nn - hitters.test$Salary)^2))
+
+##  
+    
+set.seed(123)
+model.nn <- neuralnet(Salary ~., data = hitters.train.norm,                         hidden = c(5, 3)) 
+ 
+yhat.nn.norm <- predict(model.nn, hitters.test.norm) 
+
+yhat.nn <- yhat.nn.norm*(max(hitters$Salary) -      min(hitters$Salary)) + min(hitters$Salary) 
+  
+  sqrt(mean((yhat.nn - hitters.test$Salary)^2))
+  
+##
+  
+set.seed(123)
+model.nn <- neuralnet(Salary ~., data = hitters.train.norm,                         hidden = c(8, 2)) 
+ 
+yhat.nn.norm <- predict(model.nn, hitters.test.norm) 
+
+yhat.nn <- yhat.nn.norm*(max(hitters$Salary) -      min(hitters$Salary)) + min(hitters$Salary)
+  
+  sqrt(mean((yhat.nn - hitters.test$Salary)^2))   
+```
+
+## Slide 14
+
+In all the previous examples, we only split up the data set into one *fold*. But our final results can be very dependent on which observations fell in the training vs. test sets. So let's break it up into 10 folds and average across them. This is 10-fold CV!
+
+I only provide an example for OLS regression. But the idea would be the exact same for any other type of model. **NOTE:** The one big difference is that we switch the negative sign from the test set to the training set. This is because the new function gives the *test* observations in each fold, whereas the previous function gave us the *training* observations in the one fold.
+
+We can see over the 10-folds that we can a test RMSE as low as about 230 and as high as about 506. So there's quite a bit of variation! On average, we are off by about 333.13 in our test predictions. This is on-par with what we were seeing the last two lectures using the ```train( )``` function in the caret package.
+
+```{r}
+set.seed(500)
+train.samp <- createFolds(1:nrow(hitters), k = 10) # new function. Gives us 10-folds instead of one
+
+test.rmse <- NULL # initialize object so we can store a value for each iteration
+for(i in 1:10){ # loop through all 10 folds
+  
+  hitters.train <- hitters[-train.samp[[i]], ] # training set for i-th fold
+  hitters.test <- hitters[train.samp[[i]], ] # test set for i-th fold
+  
+  lm.fit.train <- lm(Salary ~ ., data = hitters.train)
+  yhat.lm.test <- predict(lm.fit.train, hitters.test)
+  
+test.rmse[i] <- sqrt(mean((hitters.test$Salary - yhat.lm.test)^2)) # store test RMSE from i-th fold into the i-th element in initialized object (see above the for( ) part)
+    
+}
+
+test.rmse # look at all 10
+mean(test.rmse) # mean of all 10. Final estimate of test RMSE
+```

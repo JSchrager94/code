@@ -1,0 +1,137 @@
+---
+title: "Lecture 6 R Code"
+author: "Drew Crossett"
+date: "7/20/2021"
+output: word_document
+---
+
+## Slide 8
+
+We first check for missing observations. There are none. We next look at the distribution of class responses in the data set, where we see a severe class imbalance: only about 3.3\% being *successes* (```Yes```). From the plots we can see that those that default tend to have higher balances. It's hard to tell if there is a relationship between whether they are a student if they default. But for both of those groups, students tend to have higher balances. The other plot shows that there's more variation in in come for those that don't default than there is in those that do default. Also students tend to make much less income.
+
+```{r, message = FALSE}
+setwd("~/Desktop/WCU Courses/Summer21/STA 536/Week 3")
+
+library(caret)
+library(tidyverse)
+
+Default <- read.csv("Lecture6data.csv")
+  str(Default)
+
+sapply(Default, function(x) sum(is.na(x))) # which variables have missing values 
+which(rowSums(is.na(Default)) > 0) # which observations have missing values
+
+summarize(group_by(Default, default), n = n()) # distribution of response variable. Could also use table(Default$default)
+summarize(group_by(Default, default, student), n = n()) # two-way table with counts as number of observations in each cell. Could also use table(Default$student, Default$default)
+
+ggplot(Default, aes(x = balance, y = default, 
+                    color = student)) +
+  geom_point(alpha = 0.5)
+
+ggplot(Default, aes(x = income, y = default, 
+                    color = student)) +
+  geom_point(alpha = 0.5)
+```
+
+## Slide 11
+
+Based on 10-fold CV, the optimal number of neighbors is 7 with a test accuracy of about 0.972. In other words, we correctly predict about 97.2\% of the observations held out in our test sets. This sounds great! However, we know that 96.67\% of our data set is classified as a ```No```. So the model didn't have to do too much more than just predict ```No``` regardless of the observation characteristics. This is what the Kappa statistic measures. A value close to 0 says you may as well just predict one class for every observation. Values close to 1 means there was almost perfect agreement. Our test Kappa is 0.44, which is pretty good, but not nearly as good as the 0.972 would seem.
+
+We also generate the training *confusion matrix*. Here, the rows are the true class responses and the columns are the predicted class responses. The diagonals are where the predictions match the true values and the off-diagonals are where mistakes were made by the model. The proportion of diagonals out of the total number of observations is the *Accuracy*.  **Note**: The reason we don't get the same thing from output of the ```train()``` function is because this is the **training** confusion matrix. So we can see that we would have been overly optimistic had we reported these results instead of the *test* accuracy, which is what the output gives us.
+
+Finally, sometimes we are more concerned about making certain types of mistakes or making sure we get certain things right. For example, if we are the bank, then failing to predict someone IS going to default on the loan is much more important than failing to predict someone is NOT going to default on the loan. So maybe we are more willing to predict more successes (default on loan) in general by decreasing the probability that someone will default necessary to predict them as a ```Yes```. If we change the default setting of 0.50 to 0.40, then we increase the number of predicted successes to go from ```r 49 + 127``` to ```r 111 + 172```. And in particular, our correctly predicted successes increase from 127 to 172.
+
+```{r}
+fitControl <- trainControl(method = "cv", number = 10,
+                           classProbs = TRUE) # R knows its classification. So keep class probabilities
+set.seed(1)
+model.knn <- train(default ~ ., 
+                   data = Default,
+                   method = "knn",
+                   preProcess = c("center", "scale"),
+                   trControl = fitControl)
+
+model.knn
+
+pred.class <- predict(model.knn, Default) # predict the class of each observation from KNN with k = 7 (previous part)
+  table(Default$default, pred.class) # Rows are the actual response values. Columns are predicted response values from previous part.
+    mean(Default$default == pred.class)
+    
+pred.prob <- predict(model.knn, Default, type = "prob") # get probabilities for each class from predicted model.
+  head(pred.prob, 10) # Look at first 10 observations
+
+pred.class.new <- ifelse(pred.prob$Yes >= 0.50, "Yes", "No") # Default probability cutoff is 0.50
+  table(Default$default, pred.class.new)
+    mean(Default$default == pred.class.new) # Accuracy rate
+
+pred.class.new <- ifelse(pred.prob$Yes >= 0.40, "Yes", "No") # Make the probability cutoff lower
+  table(Default$default, pred.class.new) #Increases the overal number of predicted successes 
+    mean(Default$default == pred.class.new) # Lowers overall accuracy  
+```
+
+## Slides 17 - 18
+
+For using the ```glm()``` function you first have to change the response from a character value to a factor value. In order to use logistic regression, we use the ```family = "binomial"``` argument. This is because we use logistic regression when we have $n$ observations that are either successes or failures. We estimate the probability of success as a function of our predictors through the *logistic* function. 
+
+Logistic regression is called a **generalized linear model (GLM)** because the response itself is not a linear function of the predictors. However, a function (called a *link*) of the response is a linear function of the predictors. We call that link function the *logit* or *log-odds* of success. This means the coefficient estimates are not "the amount of change in **y** for a one-unit change in that variable", they are: "the amount of change in the **log-odds** of success for a one-unit increase in x."
+
+Using the ```train()``` function we can see that we do slightly better using logistic regression than we did using KNN which the probability threshold of success set to 0.50.
+
+```{r}
+Default$default <- as.factor(Default$default)
+  str(Default)
+  
+glm.fit <- glm(default ~ ., data = Default, 
+               family = "binomial") # for logistic regression
+  summary(glm.fit)
+  
+fitControl <- trainControl(method = "cv", number = 10,
+                           classProbs = TRUE) 
+
+set.seed(1)
+model.glm <- train(default ~ .,
+                   data = Default,
+                   method = "glm",
+                   family = "binomial",
+                   trControl = fitControl)  
+
+model.glm  
+  summary(model.glm) # gives same as above
+  
+pred.class <- predict(model.glm, Default)
+  table(Default$default, pred.class) # confusion matrix for training data
+  mean(Default$default==pred.class) # training accuracy
+
+pred.prob <- predict(model.glm, Default, type = "prob") # return probabilities instead of classes
+    head(pred.prob, 10) # look at first 10 observations
+    pred.class.new <- ifelse(pred.prob$Yes >= 0.50, "Yes", "No") # if predicted prob at least 0.50 call observation a Yes. Otherwise, call it a No
+    table(Default$default, pred.class.new) # Same as above
+      mean(Default$default == pred.class.new) # Same as above 
+```
+
+## Slide 19
+
+Instead of using the test accuracy to choose our optimal models and evaluate model performance, we often use the *Area Under the Curve (AUC)*. The *curve* is called a **Receiver Operating Curve (ROC)**. This curve balances the trade off between *sensitivity* and *specificity*. Sensitivity is ability to correctly predict successes. Specificity is ability to correctly predict failures. **Note**: For some reason this function switches the baseline for success and failure when returning the sensitivity and specificity.
+
+```{r}
+fitControl <- trainControl(method = "cv", number = 10,
+                           classProbs = TRUE,
+                           summaryFunction = twoClassSummary) # to get ROC statistics
+
+set.seed(1)     
+model.glm <- train(default ~ .,
+                   data = Default,
+                   method = "glm",
+                   family = "binomial",
+                   metric = "ROC", # Choose best model using test AUC 
+                   trControl = fitControl)
+      
+model.glm 
+
+table(Default$default, pred.class) # training confusion matrix with 0.50 cutoff. From previous code chunk
+
+sens <- 105/(228 + 105)
+  sens
+specf <- 9627/(9627 + 40)
+  specf
+```

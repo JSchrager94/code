@@ -1,0 +1,87 @@
+---
+title: "Lecture 1 R Code"
+author: "Drew Crossett"
+date: "7/6/2021"
+output: word_document
+---
+
+## Introductory R Stuff
+
+In the following code chunk, we change the working directory to wherever you downloaded the data set (it will be different for you). Then, we read in the data set (call it ```data```) and load the tidyverse library.
+
+```{r}
+setwd("~/Desktop/WCU Courses/Summer21/STA 536/Week 1")
+data <- read.csv("Lecture1data.csv")
+  str(data) # Looks at the `structure' of the data set
+  
+library(tidyverse)  
+```
+
+## Plots
+
+The following code creates some plots using the ```ggplot( )``` function which is loaded with the tidyverse package. The first plot is a simple scatterplot of the two *predictor* variables (called ```PredictorA``` and ```PredictorB```). The second plot then adds a layer of complexity by changing the color and shape of the points based on the categorical *response* variable (called ```classes```)
+
+```{r}
+ggplot(data, aes(x = PredictorA, y = PredictorB)) + 
+  geom_point( )
+    
+ggplot(data, aes(x = PredictorA, y = PredictorB)) +
+  geom_point(aes(color = classes, shape = classes))
+```
+
+## Mutations
+
+We can add variables that are functions of already existing variables using the ```mutate( )``` function. Here, we add two variables: ```A.z``` and ```B.z``` which are the centered and scaled values of ```PredictorA``` and ```PredictorB```. The ```na.rm = TRUE``` inside the ```scale( )``` function means "remove any observations with missing values." From the structure of the new data set (called ```data.z```), we can see that there are now five variables. There are two missing values in the first six observations. We then verify that we get the correct z-score for the first value in ```A.z```
+
+```{r}
+data.z <- mutate(data, 
+                A.z = scale(PredictorA),
+                B.z = scale(PredictorB))
+
+str(data.z)
+head(data.z)
+
+mean(data$PredictorA, na.rm = TRUE)
+sd(data$PredictorA, na.rm = TRUE)
+
+(.1582 - .2482647)/.1375333
+```
+
+## Selecting Variables
+
+We can select (and remove!) certain variables using the ```select()``` function. Here, we only keep ```classes```, ```A.z```, and ```B.z```. Then we look at the first six rows of the new data set (now called ```data.sel```).
+
+```{r}
+data.sel <- select(data.z, classes, A.z, B.z)
+  head(data.sel)
+```
+
+## Missing Values
+
+Since we know we have some missing values, let's *impute* them with the mean of that variable. We can ```replace``` any missing values with the variable means and R knows they are missing because of the ```is.na()``` function. We have now overwritten the original data set so that we no longer have missing values. Notice that the second value in ```PredictorA``` is now the mean of all the non-missing ```PredictorA``` values and the fourth value of ```PredictorB``` is now the mean of all the non-missing ```PredictorB``` values.
+
+```{r}
+data <- mutate(data, 
+              PredictorA = replace(PredictorA,  is.na(PredictorA), mean(PredictorA, na.rm = TRUE)),
+              PredictorB = replace(PredictorB, is.na(PredictorB), mean(PredictorB, na.rm = TRUE)))
+  
+head(data)
+```
+
+## Filtering Observations
+
+Based on the original scatterplot, let's consider those in the top right to be "unusual." We see that they are mostly circles, which means they have ```Class1``` values. So, let's filter only the observations that have ```PredictorA``` values greater than 0.42 AND have ```classes``` value of ```Class1```. Then we print all the observations that satisfy those conditions. There are 19 such observations (out of the original 208).
+
+```{r}
+filter(data, PredictorA > 0.42, classes == "Class1")
+```
+
+## Summary Statistics on Groups
+
+Finally, suppose that we wanted to find the mean values of the predictors for each of the two groups of the response. We can use the ```summarize()``` and ```group_by()``` functions together. We can see that the mean of ```PredictorA``` for ```Class1``` values is 0.301 and for ```Class2``` is 0.187. The mean of ```PredictorB``` for ```Class1 ``` values is 0.290 and 0.176 for ```Class2```. 
+
+```{r}
+summarize(group_by(data, classes), 
+          A.mean = mean(PredictorA),
+          B.mean = mean(PredictorB))
+```

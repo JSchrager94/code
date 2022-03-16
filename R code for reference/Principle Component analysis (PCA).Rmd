@@ -1,0 +1,111 @@
+---
+title: "Lecture 9 R Code"
+author: "Drew Crossett"
+date: "7/29/2021"
+output: word_document
+---
+
+## Introductory Stuff
+
+```{r, message = FALSE}
+setwd("~/Desktop/WCU Courses/Summer21/STA 536/Week 4")
+cars <- read.csv("Lecture9data.csv")
+
+library(tidyverse)
+library(GGally)
+
+pairs(cars, lower.panel = NULL)
+ggpairs(cars)
+```
+
+## Slides 9 - 12
+
+Our first attempt at running PCA shows that the first PC accounts for about 92.71\% of the variation in the data set. The first two PCs account for over 99.99\% of the variation. However, this is mostly due to the fact that ```disp``` and ```hp``` just have more variation (by orders of magnitude!) due to their units of measurement. 
+
+```{r}
+pca <- prcomp(cars)
+  summary(pca)
+  pca$rotation
+  
+  apply(cars, 2, var)
+```
+
+To alleviate this problem, we should always scale the variables unless we have very good reason to believe otherwise. Now, we can see that the first PC accounts for about 72.66\% of the variation and the first two account for about 89.18\% of the variation. We can also see that the loadings for each variable in the first PC are relatively the same (in absolute value). This effectively means that each variable carries about the same *weight* in the first PC. The signs don't necessarily mean negative or positive, believe it or not. However, it is important to note where they're different. For example, in the first PC, ```mpg```, ```drat```, and ```qsec``` all go in the same direction. The rest go in the other direction. 
+
+The second PC, on the other hand, shows which variables tend to be weighted more than others. The largest positive values belong to ```hp``` and ```drat``` and the largest negative values belong to ```wt``` and ```qsec```. So these variables tend to *drive* (pun intended) this second dimension, but in different directions.
+
+```{r}
+pca.sc <- prcomp(cars, scale = TRUE) 
+  summary(pca.sc)
+  pca.sc$rotation
+```
+
+## Slides 13 - 14
+
+A *biplot* plots the observations in the first two dimensions (PCs) of the *new* coordinate system. Effectively, PCA *rotates* the observations such the first dimension explains the most variation, the second variation explains the second most variation, etc. and we know that each dimension in this new coordinate system is perpendicular to each other (i.e. uncorrelated). The beauty of this is now I can take something that was originally 7 dimensions and *project* it into 2 dimensional space while still preserving almost 90\% of the original variation in the data set. Also, I know that these two variables will be uncorrelated with one another.
+
+The x-axis in the biplot is the first PC. The y-axis is the second PC. Each number is an observation. 1 means the first observation, 2 the second, etc. The arrows are the (scaled) loading value of that variable in both dimensions (PC 1 and 2). 
+
+In our example, recall that ```mpg```, ```drat```, and ```qsec``` all had the same sign in PC 1. That's why all three of those variables go to the left (negative doesn't have to mean left, by the way). The rest go to the right. Also, the length of each arrow is approximately the same because the loading values were pretty similar.
+
+Now, in PC 2 (the y-axis), ```disp```, ```wt```, and ```qsec``` are all negative, and the rest are positive. That's why all three of those variables point below the (imaginary) horizontal line at PC2 = 0. The rest point above that horizontal line. ```disp``` is barely below the line because the loading value (-0.08) is pretty close to 0. ```qsec```, on the other hand points well below the horizontal line because it has a pretty large (negative) loading value (-0.749). ```wt``` is somewhere in-between. Observations like 15 and 16 are on the right in terms on PC1, which means some linear combination of ```hp```, ```cyl```, ```disp```, and ```wt``` tend to be very different (either above or below) from the rest of the observations (in terms of means). However, since they're below the horizontal line at PC2 = 0, a linear combination of ```disp```, ```wt```, and ```qsec``` (mostly just ```qsec``` and ```wt```) for these observations tend to be pretty different from say, observations 29 and 31, which are almost just as far right.
+
+```{r}
+biplot(pca.sc) 
+
+apply(cars, 2, mean)
+
+screeplot(pca.sc, type = "lines")
+```
+
+## Slides 15 - 16
+
+The eigenvalues from the SVD (not shown in notes) can be interpreted as the amount variance that PC explains. We start with the unscaled analysis. The sum of the squared ```sdev``` ($\sqrt{\lambda}$) add up to the sum of the diagonals from the covariance matrix (the variance of each variable).
+
+Scaling the variables is equivalent to performing SVD on the correlation matrix, instead of the covariance matrix. So everything still adds up. Remember that correlations are just scaled covariances. So the sum of the diagonals from the correlation matrix will always add up to the number of variables.
+
+Finally, we show that the correlation between the variables in the *new* coordinate system are functionally zero.
+
+```{r}
+var(cars)  
+  sum(pca$sdev^2)
+  sum(diag(var(cars)))
+  
+#  
+
+cor(cars)  
+  pca.sc$sdev
+  sum(pca.sc$sdev^2)
+  sum(diag(cor(cars)))
+  
+cor(pca.sc$x)  
+```
+
+## Slide 17
+
+The main reason why people use PCA is to visualize a higher dimensional system in 2-3 dimensions, while still preserving some feature (the variance). We can make a 2-d scatterplot of the observations using the first two PCs. This can allow us to see structure that we couldn't have in the 7-d space. We can also add in additional "dimensions" by changing the size, etc. of the points based on the third PC, or fourth, etc.
+
+Finally, it's very easy to project a new point into this new space by just matrix multiplying the (scaled) observation by the loading value matrix and then selecting the first two columns (for PC1 and 2, first three columns if using PC 3).
+
+```{r}
+new.coords <- data.frame(pca.sc$x)
+
+ggplot(new.coords, aes(x = PC1, y = PC2)) +
+  geom_point()
+
+ggplot(new.coords, aes(x = PC1, y = PC2, size = PC3)) +
+  geom_point()
+
+newdata <- data.frame(mpg = 25, cyl = 6, disp = 240,
+                      hp = 155, drat = 3.6, wt = 3, qsec = 19)
+
+new.point <- scale(newdata, pca.sc$center, 
+                   pca.sc$scale) %*% pca.sc$rotation
+
+ggplot(new.coords, aes(x = PC1, y = PC2, size = PC3)) +
+  geom_point() + 
+  geom_point(aes(x = new.point[1],
+                 y = new.point[2],
+                 size = new.point[3]), color = "red")
+
+```
